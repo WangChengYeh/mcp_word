@@ -23,9 +23,10 @@ flowchart LR
 - Stack: Node.js (ESM), Express (static hosting), Claude MCP TypeScript SDK (@modelcontextprotocol/sdk/server/mcp.js and @modelcontextprotocol/sdk/server/stdio.js)
 - Responsibilities:
   1. Serve static resources (`manifest.xml`, `taskpane.html`, `taskpane.js`) via Express
-  2. Initialize the MCP SDK and register an `EditTask` handler:
-     - Receive edit requests from CLI or an AI agent and interact with the AI model via SDK
-     - Return the edit results to the Office Add-in client
+  2. Instance an McpServer and registerTool an `EditTask`:
+     - Receive edit requests from CLI or an AI agent and interact with the AI model
+     - Forward to Office Add-in
+     - Return the edit results from the Office Add-in
 - Startup: `node server.js` (listens on port 3000 by default)
 
 ### 3.2 Office Add-in (public/)
