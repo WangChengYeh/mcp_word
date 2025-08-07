@@ -1,5 +1,5 @@
 ---
-# SPEC: AI-Driven Word Editing Pipeline
+ # SPEC: MCP Server for AI-Driven Office Task Processing
 ---
 
 Version: 1.0.0  
@@ -7,16 +7,14 @@ Date: 2025-08-07
 Author: **Your Name**
 
 ## 1. Introduction
-The AI-Driven Word Editing Pipeline enables users to issue natural language instructions via an Office.js Word Add-in. These instructions are processed by a Codex-based AI agent, then routed through an MCP Server to apply edits to Word documents. The following specification details the architecture, data flows, component interfaces, schemas, and error handling for this pipeline.
+The MCP Server receives structured instructions from an AI agent and executes Office tasks—such as editing Word documents—via a CLI-based Office interop tool. This specification details the server’s architecture, HTTP endpoints, data schemas, and error handling.
 
-## 2. Pipeline Overview
-The AI-driven editing pipeline comprises five stages:  
+## 2. Architecture Overview
 ```mermaid
 flowchart LR
-  A[Codex CLI] --> B[AI Agent]
-  B --> C[MCP Server]
-  C --> D[Office.js Add-in]
-  D --> E[Word Document]
+  A[AI Agent] --> B[MCP Server]
+  B --> C[Office Interop CLI]
+  C --> D[Office Document]
 ```
 
 **Note:** This specification covers only the MCP Server component.
@@ -25,22 +23,44 @@ flowchart LR
 
 ### 3.1 MCP Server (src/server/mcpServer.ts)
 **Class**: `MCPServer`  
-**Dependencies**: `@microsoft/mcp-sdk`  
+**Dependencies**:
+- `@microsoft/mcp-sdk` for protocol and validation  
+- Node.js `child_process` for invoking the interop CLI
 
-#### HTTP Endpoint
-- **POST** `/api/apply`  
-  - Request: `{ prompt: string }`  
-  - Behavior:
-    1. Invokes AI agent to generate edits from the prompt.
-    2. Applies edits via WordService tool:
+#### Endpoints
+- **POST** `/api/process`
+  - **Request**:
+    ```json
+    { "prompt": string }
+    ```
+  - **Behavior**:
+    1. Invoke AI agent to generate `AIResponse` tasks.
+    2. Return the tasks JSON.
+  - **Response**:
+    ```json
+    { "tasks": AIResponse }
+    ```
+
+- **POST** `/api/execute`
+  - **Request**:
+    ```json
+    { "tasks": AIResponse }
+    ```
+  - **Behavior**:
+    1. Serialize `tasks` to `input.json`.
+    2. Execute:
        ```bash
-       mcp-msoffice-interop-word --input edits.json --output edited.docx
+       mcp-msoffice-interop-office --input input.json --output output.docx
        ```
-  - Response: `{ docPath: string }`
+    3. Return path to `output.docx`.
+  - **Response**:
+    ```json
+    { "docPath": string }
+    ```
 
 
-### 3.2 WordService Library (src/word/word-service.ts)
-**Class**: `WordService`  
+### 3.2 CLI Integration
+Use the `mcp-msoffice-interop-office` CLI tool to perform the actual Office automation tasks.
 
 #### Public Methods
 - `getWordApplication(): Promise<WordApplication>`
@@ -68,20 +88,21 @@ interface PictureOptions { link?: boolean; embed?: boolean; width?: number; heig
 ```
 
 ### 3.3 Office.js Word Add-in (office/taskpane.js)
-#### applyEdits(prompt: string): Promise<void>
-1. Sends user prompt directly to MCP Server:
-   ```ts
-   const res = await fetch('/api/apply', {
-     method: 'POST',
-     headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({ prompt })
-   });
-   const { docPath } = await res.json();
-   ```
-2. Opens returned `docPath` in Word:
-   ```ts
-   Office.context.document.openAsync(docPath);
-   ```
+The Add-in listens for edit instructions pushed by the MCP Server.
+
+#### Endpoint: `/taskpane/receiveEdits`
+- Registers a message handler to apply edits:
+  ```ts
+  Office.actions.associate('receiveEdits', async (args) => {
+    const edits = args.data.edits as Array<{ action: string; target: string; content?: string }>;
+    // Apply edits to the document using Office.js APIs
+    for (const edit of edits) {
+      // e.g., insertText, deleteText, replace logic
+    }
+    return { status: 'success' };
+  });
+  ```
+Users do not directly invoke UI flows; MCP Server pushes edits via Office runtime messages.
 
 ## 4. Data Schemas
 
@@ -92,11 +113,11 @@ interface AIResponse {
 }
 ```
 
-### 4.2 ProcessedData
+### 4.2 ErrorResponse
 ```ts
-interface ProcessedData {
-  edits: AIResponse['edits'];
-  context: { paragraphs: string[]; tables: any[] };
+interface ErrorResponse {
+  error: string;
+  statusCode: number;
 }
 ```
 
@@ -106,12 +127,13 @@ interface ErrorResponse { error: string; statusCode: number; }
 ```
 
 ## 5. Error Handling
-- All components must return clear error messages and status codes.  
-- Retry logic is recommended for transient failures (network, COM timeouts).  
+- All endpoints must return HTTP 4xx/5xx with an `ErrorResponse`.
+- Retry transient failures (network, COM timeouts) up to 3 times.
+- Log errors for diagnostics.
 
 ## 6. Extensibility
-- Support additional Office hosts (Excel, PowerPoint) by extending WordService and pipeline endpoints.  
-- Integrate webhook-based events for collaborative editing.  
+- Extend to other Office hosts (Excel, PowerPoint) by updating CLI wrapper and task schema.
+- Support webhook subscriptions or WebSocket streams for real-time collaboration.
 ---
 
 ## 1. Pipeline Overview
