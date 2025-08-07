@@ -1,64 +1,29 @@
-# SPEC: AI-Driven Word Editing Pipeline
+# SPEC: MCP server -> office.js -> Word
 
 This document defines the prompt, tools, and interfaces for the pipeline that connects:
 
-1. **Codex CLI**
-2. **MCP Server**
-3. **mcp-msoffice-interop-word** CLI tool
-4. **Office.js Word Add-in**
+1. **MCP Server**
+2. **Office.js Word Add-in**
 
 ---
 
 ## 1. Pipeline Overview
 
-User invokes a prompt in the Office Add-in, which is forwarded to the Codex CLI. The AI-generated JSON travels via the MCP Server to the mcp-msoffice-interop-word CLI tool, which applies edits to the Word document. The modified document is then returned to the Office Add-in.
 
 ```
-Office.js UI → CodexCLI → MCPServer → mcp-msoffice-interop-word → Word Document
-```  
+Codex CLI → MCPServer → Office.js Word Add-in → Word Document
+```
 
 ---
 
 ## 2. Components & Interfaces
-
-### 2.1 CodexCLI (src/ai/codexCLI.ts)
-
-**Class**: `CodexCLI`
-
-**Method**: `execute(prompt: string, options?: object): Promise<AIResponse>`
-
-- **Input**:
-  - `prompt`: Natural language instruction for document editing
-  - `options`: (optional) parameters such as temperature, max_tokens
-- **Output**:
-  ```ts
-  interface AIResponse {
-    edits: Array<{ action: string; location: string; content?: string }>;
-  }
-  ```
-
-- **Behavior**:
-  1. Generates an `AIResponse` by invoking the AI agent.
-  2. Sends the resulting `AIResponse.edits` to the MCP server for processing:
-     ```ts
-     await fetch(`${MCP_SERVER_URL}/api/process`, {
-       method: 'POST',
-       headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({ edits: aiResponse.edits })
-     });
-     ```
-
-- **Error**: Throws an `Error` if CLI invocation fails, output is invalid JSON, or the MCP server request fails.
-
----
-
-### 2.2 MCPServer (src/server/mcpServer.ts)
+### 2.1 MCPServer (src/server/mcpServer.ts)
 
 **Class**: `MCPServer`
 
 **Dependencies**:
-- `@microsoft/mcp-sdk`: MCP TypeScript SDK for message handling, validation, and protocol support.
 
+- `@microsoft/mcp-sdk`: MCP TypeScript SDK for message handling, validation, and protocol support.
 **Endpoints**:
 
 1. **POST** `/api/process`  
@@ -97,24 +62,7 @@ Office.js UI → CodexCLI → MCPServer → mcp-msoffice-interop-word → Word D
 
 ---
 
-### 2.3 mcp-msoffice-interop-word CLI Tool
-
-**Repository**: https://github.com/mario-andreschak/mcp-msoffice-interop-word
-
-**Invocation**:
-```bash
-mcp-msoffice-interop-word \
-  --input <path/to/processedData.json> \
-  --output <path/to/edited.docx>
-```
-
-**Input Format**: JSON file matching the `processedData` schema.
-
-**Output**: A Word `.docx` file with applied edits.
-
----
-
-### 2.3.1 WordService API (mcp-msoffice-interop-word/src/word/word-service.ts)
+## 2.2 WordService API (mcp-msoffice-interop-word/src/word/word-service.ts)
 
 透過 `WordService` 類別，可在 Node.js 環境中直接呼叫 mcp-msoffice-interop-word 工具的主要方法：
 
