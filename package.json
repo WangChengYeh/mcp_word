@@ -12,6 +12,6 @@
     "socket.io": "^4.6.1",
     "body-parser": "^1.20.2",
   "archiver": "^5.3.1",
-  "@modelcontextprotocol/typescript-sdk": "^1.0.0"
+  "@modelcontextprotocol/sdk": "^1.0.0"
   }
 }

@@ -20,7 +20,7 @@ flowchart LR
 ## 3. Components
 
 ### 3.1 MCP Server (`server.js`)
-- Stack: Node.js (ESM), Express (static hosting), Claude MCP SDK
+- Stack: Node.js (ESM), Express (static hosting), Claude MCP TypeScript SDK (@modelcontextprotocol/sdk/server/mcp.js and @modelcontextprotocol/sdk/server/stdio.js)
 - Responsibilities:
   1. Serve static resources (`manifest.xml`, `taskpane.html`, `taskpane.js`) via Express
   2. Initialize the MCP SDK and register an `EditTask` handler:
