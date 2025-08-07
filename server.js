@@ -4,10 +4,16 @@ import { Server } from 'socket.io';
 import bodyParser from 'body-parser';
 import archiver from 'archiver';
 import path from 'path';
+// Import Claude MCP SDK client
+import { MCPClient } from 'claude-mcp-sdk';
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+// Initialize Claude MCP SDK client
+const mcpClient = new MCPClient({
+  apiKey: process.env.CLAUDE_API_KEY,
+});
 
 // Middleware
 app.use(bodyParser.json());
@@ -21,24 +27,21 @@ io.on('connection', (socket) => {
   });
 });
 
-// Endpoint to receive CLI POST and broadcast 'ai-cmd'
-app.post('/mcp', (req, res) => {
-  const payload = req.body;
-  io.emit('ai-cmd', payload);
-  res.json({ status: 'ok' });
+// Endpoint to receive CLI POST, process EditTask via MCP SDK, and broadcast result
+app.post('/mcp', async (req, res) => {
+  try {
+    const { content } = req.body;
+    // Process EditTask through Claude MCP SDK
+    const result = await mcpClient.requestEditTask({ content });
+    // Broadcast editing result to Office Add-in client
+    io.emit('ai-cmd', result);
+    res.json({ status: 'ok', result });
+  } catch (error) {
+    console.error('EditTask error:', error);
+    res.status(500).json({ status: 'error', message: error.message });
+  }
 });
 
-// Endpoint to download project as ZIP (excluding node_modules)
-app.get('/download', (req, res) => {
-  res.attachment('project.zip');
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  archive.pipe(res);
-  archive.glob('**/*', {
-    cwd: process.cwd(),
-    ignore: ['node_modules/**', '.git/**']
-  });
-  archive.finalize();
-});
 
 // Start server
 const PORT = process.env.PORT || 3000;

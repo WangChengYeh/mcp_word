@@ -18,12 +18,13 @@ flowchart LR
 
 ## 3. Components
 
-### 3.1 Proxy Server (server.js)
-- 技術棧：Node.js (ESM)、Express、Socket.io、archiver、body-parser  
+### 3.1 MCP Server (server.js)
+- 技術棧：Node.js (ESM)、Express（僅用於靜態託管）、Claude MCP SDK  
 - 功能：
-  1. 靜態託管 public 資源 (`manifest.xml`, `taskpane.html`, `taskpane.js`)  
-  2. POST `/mcp`：接收 CLI 或 AI Agent 發送的 JSON，並通過 WebSocket 廣播 `ai-cmd` 事件  
-  3. GET `/download`：動態打包專案成 ZIP 供下載 (排除 `node_modules`、`.git`)  
+-  1. 使用 Express 靜態託管 public 資源 (`manifest.xml`, `taskpane.html`, `taskpane.js`)  
+-  2. 使用 Claude MCP SDK 初始化 MCP 伺服器，並註冊 `EditTask` 命令處理器
+-     - 接收來自 CLI 或 AI Agent 的編輯請求，並通過 SDK 與 AI 模型互動
+-     - 將編輯結果直接回傳至 Office Add-in 客戶端
 - 啟動：`node server.js`，預設監聽 3000 埠  
 
 ### 3.2 Office Add-in (public/)
@@ -45,7 +46,7 @@ flowchart LR
 ## 4. 使用流程
 1. 啟動 Proxy Server：`npm install && npm start`  
 2. 在 Word 中側載 Add-in manifest  
-3. CLI 或其他服務 POST `/mcp` 並帶入 `{ content: '...' }`  
+3. CLI 或其他服務透過 Claude MCP SDK 發送 `EditTask` 請求，內容範例 `{ content: '...' }`  
 4. Add-in 實時接收並插入 Word 文件
 
 ## 5. Extensibility
