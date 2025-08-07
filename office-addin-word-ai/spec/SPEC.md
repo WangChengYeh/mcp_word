@@ -27,32 +27,19 @@ flowchart LR
 **Class**: `MCPServer`  
 **Dependencies**: `@microsoft/mcp-sdk`  
 
-#### HTTP Endpoints
-- **POST** `/api/process`  
-  - Request: `{ edits: AIResponse.edits }`  
-  - Response: `{ processedData: ProcessedData }`  
-
+#### HTTP Endpoint
 - **POST** `/api/apply`  
-  - Request: `{ processedData: ProcessedData }`  
-  - Behavior: Internally invokes WordService API to apply edits:  
-    ```bash
-    mcp-msoffice-interop-word --input processedData.json --output edited.docx
-    ```
-  - Response: `{ docPath: string }`  
+  - Request: `{ prompt: string }`  
+  - Behavior:
+    1. Invokes AI agent to generate edits from the prompt.
+    2. Applies edits via WordService tool:
+       ```bash
+       mcp-msoffice-interop-word --input edits.json --output edited.docx
+       ```
+  - Response: `{ docPath: string }`
 
-#### ProcessedData Schema
-Extends `AIResponse` with document context for reliable editing:
-```ts
-interface ProcessedData {
-  edits: AIResponse['edits'];
-  context: {
-    paragraphs: string[];
-    tables: any[];
-  };
-}
-```
 
-### 3.2 WordService Library (mcp-msoffice-interop-word/src/word/word-service.ts)
+### 3.2 WordService Library (src/word/word-service.ts)
 **Class**: `WordService`  
 
 #### Public Methods
@@ -82,10 +69,19 @@ interface PictureOptions { link?: boolean; embed?: boolean; width?: number; heig
 
 ### 3.3 Office.js Word Add-in (office/taskpane.js)
 #### applyEdits(prompt: string): Promise<void>
-1. Sends user prompt to Codex AI Agent  
-2. Receives `AIResponse`, POST to `/api/process`  
-3. Receives `processedData`, POST to `/api/apply`  
-4. Opens returned `docPath` in Word using `Office.context.document.openAsync`
+1. Sends user prompt directly to MCP Server:
+   ```ts
+   const res = await fetch('/api/apply', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ prompt })
+   });
+   const { docPath } = await res.json();
+   ```
+2. Opens returned `docPath` in Word:
+   ```ts
+   Office.context.document.openAsync(docPath);
+   ```
 
 ## 4. Data Schemas
 
