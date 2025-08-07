@@ -1,10 +1,121 @@
-# SPEC: MCP server -> office.js -> Word
+---
+# SPEC: AI-Driven Word Editing Pipeline
+---
 
-This document defines the prompt, tools, and interfaces for the pipeline that connects:
+Version: 1.0.0  
+Date: 2025-08-07  
+Author: **Your Name**
 
-1. **MCP Server**
-2. **Office.js Word Add-in**
+## 1. Introduction
+The AI-Driven Word Editing Pipeline enables users to issue natural language instructions via an Office.js Word Add-in. These instructions are processed by a Codex-based AI agent, then routed through an MCP Server to apply edits to Word documents. The following specification details the architecture, data flows, component interfaces, schemas, and error handling for this pipeline.
 
+## 2. Pipeline Overview
+The AI-driven editing pipeline comprises five stages:  
+```mermaid
+flowchart LR
+  A[Codex CLI] --> B[AI Agent]
+  B --> C[MCP Server]
+  C --> D[Office.js Add-in]
+  D --> E[Word Document]
+```
+
+**Note:** This specification covers only the MCP Server component.
+
+## 3. Components & Interfaces
+
+### 3.1 MCP Server (src/server/mcpServer.ts)
+**Class**: `MCPServer`  
+**Dependencies**: `@microsoft/mcp-sdk`  
+
+#### HTTP Endpoints
+- **POST** `/api/process`  
+  - Request: `{ edits: AIResponse.edits }`  
+  - Response: `{ processedData: ProcessedData }`  
+
+- **POST** `/api/apply`  
+  - Request: `{ processedData: ProcessedData }`  
+  - Behavior: Internally invokes WordService API to apply edits:  
+    ```bash
+    mcp-msoffice-interop-word --input processedData.json --output edited.docx
+    ```
+  - Response: `{ docPath: string }`  
+
+#### ProcessedData Schema
+Extends `AIResponse` with document context for reliable editing:
+```ts
+interface ProcessedData {
+  edits: AIResponse['edits'];
+  context: {
+    paragraphs: string[];
+    tables: any[];
+  };
+}
+```
+
+### 3.2 WordService Library (mcp-msoffice-interop-word/src/word/word-service.ts)
+**Class**: `WordService`  
+
+#### Public Methods
+- `getWordApplication(): Promise<WordApplication>`
+- `getActiveDocument(): Promise<WordDocument>`
+- `createDocument(): Promise<WordDocument>`
+- `openDocument(path: string): Promise<WordDocument>`
+- `saveDocument(): Promise<void>`
+- `saveDocumentAs(path: string, format?: number): Promise<void>`
+- `closeDocument(doc: WordDocument, saveChanges?: boolean): Promise<void>`
+- `insertText(text: string): Promise<void>`
+- `deleteText(unit: number, count: number): Promise<void>`
+- `findAndReplace(findText: string, replaceText: string, options?: ReplaceOptions): Promise<boolean>`
+- `toggleFormat(type: 'bold'|'italic'|'underline'): Promise<void>`
+- `setParagraphStyle(options: ParagraphOptions): Promise<void>`
+- `addTable(rows: number, cols: number): Promise<Word.Table>`
+- `setTableCellText(tableIndex: number, row: number, col: number, text: string): Promise<void>`
+- `insertPicture(path: string, options?: PictureOptions): Promise<void>`
+...additional methods as required...
+
+#### Data Types
+```ts
+interface ReplaceOptions { matchCase?: boolean; matchWholeWord?: boolean; replaceAll?: boolean; }
+interface ParagraphOptions { alignment?: number; indent?: { left?: number; right?: number; firstLine?: number }; spacing?: { before?: number; after?: number; line?: number }; }
+interface PictureOptions { link?: boolean; embed?: boolean; width?: number; height?: number; }
+```
+
+### 3.3 Office.js Word Add-in (office/taskpane.js)
+#### applyEdits(prompt: string): Promise<void>
+1. Sends user prompt to Codex AI Agent  
+2. Receives `AIResponse`, POST to `/api/process`  
+3. Receives `processedData`, POST to `/api/apply`  
+4. Opens returned `docPath` in Word using `Office.context.document.openAsync`
+
+## 4. Data Schemas
+
+### 4.1 AIResponse
+```ts
+interface AIResponse {
+  edits: Array<{ action: string; target: string; content?: string }>;
+}
+```
+
+### 4.2 ProcessedData
+```ts
+interface ProcessedData {
+  edits: AIResponse['edits'];
+  context: { paragraphs: string[]; tables: any[] };
+}
+```
+
+### 4.3 HTTP Error Response
+```ts
+interface ErrorResponse { error: string; statusCode: number; }
+```
+
+## 5. Error Handling
+- All components must return clear error messages and status codes.  
+- Retry logic is recommended for transient failures (network, COM timeouts).  
+
+## 6. Extensibility
+- Support additional Office hosts (Excel, PowerPoint) by extending WordService and pipeline endpoints.  
+- Integrate webhook-based events for collaborative editing.  
 ---
 
 ## 1. Pipeline Overview
