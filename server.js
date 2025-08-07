@@ -5,15 +5,10 @@ import bodyParser from 'body-parser';
 import archiver from 'archiver';
 import path from 'path';
 // Import Claude MCP SDK client
-import { MCPClient } from 'claude-mcp-sdk';
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-// Initialize Claude MCP SDK client
-const mcpClient = new MCPClient({
-  apiKey: process.env.CLAUDE_API_KEY,
-});
 
 // Middleware
 app.use(bodyParser.json());
@@ -28,12 +23,21 @@ io.on('connection', (socket) => {
 });
 
 // Endpoint to receive CLI POST, process EditTask via MCP SDK, and broadcast result
+// Endpoint to receive CLI POST, optionally process EditTask via SDK, and broadcast result
 app.post('/mcp', async (req, res) => {
   try {
     const { content } = req.body;
-    // Process EditTask through Claude MCP SDK
-    const result = await mcpClient.requestEditTask({ content });
-    // Broadcast editing result to Office Add-in client
+    let result;
+    try {
+      // Dynamic import of Claude MCP SDK
+      const { MCPClient } = await import('claude-mcp-sdk');
+      const client = new MCPClient({ apiKey: process.env.CLAUDE_API_KEY });
+      result = await client.requestEditTask({ content });
+    } catch (sdkError) {
+      console.warn('Claude MCP SDK unavailable, falling back to echo:', sdkError.message);
+      // Fallback: echo content
+      result = { content };
+    }
     io.emit('ai-cmd', result);
     res.json({ status: 'ok', result });
   } catch (error) {
