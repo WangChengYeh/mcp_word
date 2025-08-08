@@ -52,7 +52,9 @@ flowchart LR
 - Support additional `EditTask` types (tables, images, formatting)
 - Add WebSocket authentication, logging, and error tracking
 
-## 6. Test
+## 6. Debugging
+- add argument --debug, dump detail and error in debug.log 
+## 7. Test
 - test.sh Unit test, Fake STDIO for MCP client and socket connection for office
 - STDIO: use shell pipeline to provide input
 - socket: generate a test javascript as a socket client
