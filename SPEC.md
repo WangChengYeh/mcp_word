@@ -11,8 +11,8 @@ MCP_WORD build a MCP server (`server.js`) alongside an Office.js Word Add-in cli
 ## 2. Architecture Overview
 ```mermaid
 flowchart LR
-  CLI/AI --> MCP Server
-  MCP Server --> Browser[Office.js Task Pane]
+  CLI/AI --> MCP[MCP Server]
+  MCP --> Browser[office.js in Office Task Pane]
   Browser --> Word[Word Document]
 ```
 
@@ -52,4 +52,6 @@ flowchart LR
 - Add WebSocket authentication, logging, and error tracking
 
 ## 6. Test
-- test.sh Unit test, Fake STDIO and socket connection
+- test.sh Unit test, Fake STDIO for MCP client and socket connection for office
+- STDIO: use shell pipeline to provide input
+- socket: generate a test javascript as a socket client
