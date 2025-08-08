@@ -10,7 +10,7 @@ This project consists of:
 
 ```mermaid
 flowchart LR
-  CLI/AI --> Proxy[Proxy Server server.js]
+  CLI/AI --> Proxy[server.js Proxy Server]
   Proxy --> Browser[Office.js Task Pane]
   Browser --> Word[Word Document]
 ```
@@ -41,39 +41,31 @@ cd mcp_word
 npm install
 ```
 
-3. Configure Claude CLI (optional):
+3. Configure Claude MCP client:
 
-Create a `.claude_config` file in your project root:
+Add the MCP server to Claude using the transport configuration:
 
-```json
-{
-  "mcpServers": {
-    "word-editor": {
-      "command": "node",
-      "args": ["server.js"],
-      "cwd": "/workspaces/mcp_word",
-      "env": {
-        "NODE_ENV": "production"
-      }
-    }
-  }
-}
+```bash
+# Add the Word Editor MCP server
+claude mcp add word-editor \
+  --transport stdio \
+  --command "node" \
+  --args "server.js" \
+  --cwd "/workspaces/mcp_word"
+
+# Verify the server was added
+claude mcp list
 ```
 
-Or configure globally in `~/.config/claude/claude_config.json`:
+For custom environment variables:
 
-```json
-{
-  "mcpServers": {
-    "word-editor": {
-      "command": "node",
-      "args": ["/workspaces/mcp_word/server.js"],
-      "env": {
-        "PORT": "3000"
-      }
-    }
-  }
-}
+```bash
+claude mcp add word-editor \
+  --transport stdio \
+  --command "node" \
+  --args "server.js" \
+  --cwd "/workspaces/mcp_word" \
+  --env "PORT=3000,NODE_ENV=production"
 ```
 
 ## Usage
@@ -101,38 +93,41 @@ The server will start on `http://localhost:3000` by default.
 
 ### 3. Connect MCP Client
 
-#### Using Claude CLI with Configuration:
+#### Using Claude MCP commands:
 
 ```bash
-# If using local .claude_config
+# Connect to the configured server
+claude mcp connect word-editor
+
+# Use the EditTask tool directly
+claude mcp call word-editor EditTask \
+  --content "Insert a professional summary about AI technology at the beginning of the document."
+
+# Interactive mode with MCP server
 claude --mcp word-editor
-
-# Direct server connection
-claude-mcp-client --server "node server.js"
-
-# With specific edit command
-claude --mcp word-editor --tool EditTask --args '{
-  "content": "Insert a professional summary about AI technology at the beginning of the document."
-}'
 ```
 
-#### Example Claude Commands:
+#### Example Claude MCP Commands:
 
 ```bash
 # Insert text at cursor
-claude --mcp word-editor --tool EditTask --args '{
-  "content": "Add a new paragraph about machine learning applications."
-}'
+claude mcp call word-editor EditTask \
+  --content "Add a new paragraph about machine learning applications."
 
-# Replace selected text
-claude --mcp word-editor --tool EditTask --args '{
-  "content": "Replace the current selection with: Artificial Intelligence is revolutionizing modern business processes."
-}'
+# Replace selected text  
+claude mcp call word-editor EditTask \
+  --content "Replace the current selection with: Artificial Intelligence is revolutionizing modern business processes."
 
 # Format and style text
-claude --mcp word-editor --tool EditTask --args '{
-  "content": "Make the first paragraph bold and add a professional heading: Executive Summary"
-}'
+claude mcp call word-editor EditTask \
+  --content "Make the first paragraph bold and add a professional heading: Executive Summary"
+```
+
+#### Remove MCP server configuration:
+
+```bash
+# Remove the server configuration
+claude mcp remove word-editor
 ```
 
 ### 4. Document Editing
@@ -195,4 +190,9 @@ The server accepts the following environment variables:
 3. **Office.js errors**: Monitor the task pane console for Office API issues
 
 ## Troubleshooting
-### Common Issues**Add-in not loading:**- Verify the server is running on port 3000- Check that `manifest.xml` points to the correct URL- Ensure Word has internet connectivity**WebSocket connection failed:**- Confirm the server is accessible at `http://localhost:3000`- Check firewall settings- Verify WebSocket support in your environment**MCP client connection issues:**- Ensure the server.js process is running- Check that the MCP client supports the required protocol version- Verify command syntax and parameters### LogsServer logs will show:- MCP protocol messages- WebSocket connections- Edit command processing- Error details## Extensibility### Adding New Edit TypesExtend the `EditTask` tool to support:- Table manipulation- Image insertion- Advanced formatting- Document structure changes### Enhanced Features- Authentication and authorization- Multi-user collaboration- Edit history and versioning- Custom AI model integration## License[Your License Here]## Contributing1. Fork the repository2. Create a feature branch3. Make your changes4. Test with Word Add-in5. Submit a pull request## SupportFor issues and questions:- Check the troubleshooting section- Review server logs- Test with minimal reproduction cases- Report bugs with detailed environment information
+
+### Common Issues
+
+**Add-in not loading:**
+- Verify the server is running on port 3000
+- Check that `manifest.xml` points to the correct URL- Ensure Word has internet connectivity**WebSocket connection failed:**- Confirm the server is accessible at `http://localhost:3000`- Check firewall settings- Verify WebSocket support in your environment**MCP client connection issues:**- Ensure the server.js process is running- Check that the MCP client supports the required protocol version- Verify command syntax and parameters### LogsServer logs will show:- MCP protocol messages- WebSocket connections- Edit command processing- Error details## Extensibility### Adding New Edit TypesExtend the `EditTask` tool to support:- Table manipulation- Image insertion- Advanced formatting- Document structure changes### Enhanced Features- Authentication and authorization- Multi-user collaboration- Edit history and versioning- Custom AI model integration## License[Your License Here]## Contributing1. Fork the repository2. Create a feature branch3. Make your changes4. Test with Word Add-in5. Submit a pull request## SupportFor issues and questions:- Check the troubleshooting section- Review server logs- Test with minimal reproduction cases- Report bugs with detailed environment information
