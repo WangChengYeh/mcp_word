@@ -56,7 +56,7 @@ Add the MCP server to Claude using HTTP transport:
 # Add the Word Editor MCP server
 claude mcp add word-editor \
   --transport http \
-  --url "http://localhost:3000/mcp"
+  socket "http://localhost:3000/mcp"
 
 # Verify the server was added
 claude mcp list
@@ -71,7 +71,7 @@ PORT=4000 npm start
 # Then configure Claude with custom URL
 claude mcp add word-editor \
   --transport http \
-  --url "http://localhost:4000/mcp"
+  socket "http://localhost:4000/mcp"
 ```
 
 ## Usage

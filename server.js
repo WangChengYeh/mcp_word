@@ -9,6 +9,25 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Parse command line arguments
+const args = process.argv.slice(2);
+const DEBUG_MODE = args.includes('--debug');
+
+// Debug logging function
+function debugLog(type, message, data = null) {
+  if (DEBUG_MODE) {
+    const timestamp = new Date().toISOString();
+    console.log(`[DEBUG ${timestamp}] ${type}: ${message}`);
+    if (data) {
+      console.log(JSON.stringify(data, null, 2));
+    }
+  }
+}
+
+if (DEBUG_MODE) {
+  console.log('[DEBUG MODE ENABLED] MCP requests and responses will be logged');
+}
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -54,6 +73,21 @@ const mcpServer = new McpServer({
   version: "1.0.0"
 });
 
+// Add debug logging for MCP server events
+if (DEBUG_MODE) {
+  mcpServer.on('request', (request) => {
+    debugLog('MCP REQUEST', `Method: ${request.method}`, request);
+  });
+
+  mcpServer.on('response', (response) => {
+    debugLog('MCP RESPONSE', 'Response sent', response);
+  });
+
+  mcpServer.on('error', (error) => {
+    debugLog('MCP ERROR', error.message, error);
+  });
+}
+
 // Register EditTask tool
 mcpServer.registerTool({
   name: "EditTask",
@@ -81,10 +115,14 @@ mcpServer.registerTool({
     required: ["content"]
   }
 }, async (args) => {
+  debugLog('TOOL EXECUTION', 'EditTask called', args);
+
   const { content, operation = "insert", position = "cursor" } = args;
 
   if (connectedClients.size === 0) {
-    throw new Error("No Office Add-in clients connected");
+    const error = new Error("No Office Add-in clients connected");
+    debugLog('TOOL ERROR', error.message);
+    throw error;
   }
 
   // Send edit command to all connected clients
@@ -95,14 +133,19 @@ mcpServer.registerTool({
     timestamp: new Date().toISOString()
   };
 
+  debugLog('WEBSOCKET EMIT', 'Sending ai-cmd to clients', editCommand);
+
   // Broadcast to all connected clients
   io.emit('ai-cmd', editCommand);
 
-  return {
+  const result = {
     success: true,
     message: `Edit command sent to ${connectedClients.size} client(s)`,
     command: editCommand
   };
+
+  debugLog('TOOL RESULT', 'EditTask completed', result);
+  return result;
 });
 
 // Start MCP server with stdio transport
@@ -117,20 +160,24 @@ const pendingEdits = new Map();
 // Enhanced socket.io connection handling
 io.on('connection', (socket) => {
   console.log(`Office Add-in client connected: ${socket.id}`);
+  debugLog('WEBSOCKET', `Client connected: ${socket.id}`);
   
   socket.on('disconnect', () => {
     console.log(`Office Add-in client disconnected: ${socket.id}`);
+    debugLog('WEBSOCKET', `Client disconnected: ${socket.id}`);
   });
   
   // Handle client status updates
   socket.on('status', (data) => {
     console.log(`Client status: ${JSON.stringify(data)}`);
+    debugLog('WEBSOCKET STATUS', `Client ${socket.id} status`, data);
   });
   
   // Return the edit results from the Office Add-in
   socket.on('edit-complete', (data) => {
     const { editId, success, message, error } = data;
     console.log(`Edit completed: ${editId}, Success: ${success}`);
+    debugLog('WEBSOCKET EDIT', `Edit completed: ${editId}`, data);
     
     const pendingEdit = pendingEdits.get(editId);
     if (pendingEdit) {
@@ -149,6 +196,7 @@ io.on('connection', (socket) => {
   socket.on('edit-error', (data) => {
     const { editId, error } = data;
     console.log(`Edit error: ${editId}, Error: ${error}`);
+    debugLog('WEBSOCKET ERROR', `Edit error: ${editId}`, data);
     
     const pendingEdit = pendingEdits.get(editId);
     if (pendingEdit) {
@@ -174,6 +222,9 @@ httpServer.listen(PORT, () => {
   console.log(`MCP Word Proxy Server running on http://localhost:${PORT}`);
   console.log(`Static resources served from: ${path.join(__dirname, 'public')}`);
   console.log('Ready to serve manifest.xml, taskpane.html, taskpane.js');
+  if (DEBUG_MODE) {
+    console.log('[DEBUG MODE] Use --debug flag to see detailed MCP communication logs');
+  }
 });
 
 // Handle graceful shutdown
