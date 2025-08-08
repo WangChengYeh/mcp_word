@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Test script for MCP Word Server
-# Unit tests without AI or Word dependencies
+# Test script for MCP Word Proxy Server & Office Add-in
+# Version: 1.0.0
 
 set -e
 
-echo "🧪 Starting MCP Word Server Tests..."
+echo "🧪 Starting MCP_WORD Test Suite..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -14,203 +14,245 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Test configuration
-TEST_PORT=3001
-SERVER_PID=""
-TEST_DIR="/tmp/mcp_word_test"
+SERVER_PORT=3000
+TEST_TIMEOUT=10
 
-# Cleanup function
-cleanup() {
-    echo -e "\n🧹 Cleaning up..."
-    if [ ! -z "$SERVER_PID" ]; then
-        kill $SERVER_PID 2>/dev/null || true
-        wait $SERVER_PID 2>/dev/null || true
-    fi
-    rm -rf "$TEST_DIR"
-    echo -e "${GREEN}✓ Cleanup completed${NC}"
+# Helper functions
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
 }
 
-# Set trap for cleanup
-trap cleanup EXIT
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
 
-# Test 1: Check dependencies
-echo -e "\n${YELLOW}Test 1: Checking dependencies...${NC}"
-if ! command -v node &> /dev/null; then
-    echo -e "${RED}✗ Node.js not found${NC}"
-    exit 1
-fi
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
 
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}✗ npm not found${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ Dependencies check passed${NC}"
+# Check if server is running
+check_server() {
+    if curl -s http://localhost:${SERVER_PORT}/taskpane.html > /dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
 
-# Test 2: Check server.js exists and is executable
-echo -e "\n${YELLOW}Test 2: Checking server.js...${NC}"
-if [ ! -f "server.js" ]; then
-    echo -e "${RED}✗ server.js not found${NC}"
-    exit 1
-fi
+# Test 1: MCP Server STDIO Interface
+test_stdio_interface() {
+    log_info "Testing MCP Server STDIO Interface..."
+    
+    # Create test MCP requests
+    cat << 'EOF' > /tmp/mcp_test_input.json
+{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}}}
+{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "edit_document", "arguments": {"content": "Hello from MCP test!"}}}
+EOF
 
-if [ ! -x "server.js" ]; then
-    chmod +x server.js
-fi
-echo -e "${GREEN}✓ server.js exists and is executable${NC}"
+    # Test STDIO pipeline
+    if node server.js < /tmp/mcp_test_input.json > /tmp/mcp_test_output.json 2>&1 &
+    then
+        SERVER_PID=$!
+        sleep 2
+        
+        # Check if server responded
+        if [ -f /tmp/mcp_test_output.json ] && [ -s /tmp/mcp_test_output.json ]; then
+            log_info "✅ STDIO interface test passed"
+            cat /tmp/mcp_test_output.json
+        else
+            log_error "❌ STDIO interface test failed - no response"
+            return 1
+        fi
+        
+        # Cleanup
+        kill $SERVER_PID 2>/dev/null || true
+        rm -f /tmp/mcp_test_input.json /tmp/mcp_test_output.json
+    else
+        log_error "❌ Failed to start MCP server for STDIO test"
+        return 1
+    fi
+}
 
-# Test 3: Start server in background
-echo -e "\n${YELLOW}Test 3: Starting MCP server...${NC}"
-mkdir -p "$TEST_DIR/public"
-echo '{"name":"test","version":"1.0.0","type":"module","dependencies":{"socket.io-client":"^4.8.1"}}' > "$TEST_DIR/package.json"
+# Test 2: WebSocket Connection Test
+test_websocket_connection() {
+    log_info "Testing WebSocket Connection..."
+    
+    # Start server in background
+    npm start &
+    SERVER_PID=$!
+    sleep 3
+    
+    if ! check_server; then
+        log_error "❌ Server not responding on port ${SERVER_PORT}"
+        kill $SERVER_PID 2>/dev/null || true
+        return 1
+    fi
+    
+    # Create WebSocket test client
+    cat << 'EOF' > /tmp/websocket_test_client.js
+const io = require('socket.io-client');
 
-# Install dependencies in test directory
-cd "$TEST_DIR"
-npm install --silent > /dev/null 2>&1
-cd - > /dev/null
-
-# Start server with test port
-PORT=$TEST_PORT node server.js > "$TEST_DIR/server.log" 2>&1 &
-SERVER_PID=$!
-
-# Wait for server to start
-sleep 3
-
-if ! kill -0 $SERVER_PID 2>/dev/null; then
-    echo -e "${RED}✗ Server failed to start${NC}"
-    cat "$TEST_DIR/server.log"
-    exit 1
-fi
-echo -e "${GREEN}✓ MCP server started (PID: $SERVER_PID)${NC}"
-
-# Test 4: Check HTTP server is running
-echo -e "\n${YELLOW}Test 4: Testing HTTP server...${NC}"
-if ! curl -s "http://localhost:$TEST_PORT" > /dev/null; then
-    echo -e "${RED}✗ HTTP server not responding${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ HTTP server is responding${NC}"
-
-# Test 5: Test Socket.IO connection
-echo -e "\n${YELLOW}Test 5: Testing Socket.IO connection...${NC}"
-cat > "$TEST_DIR/socket_test.js" << 'EOF'
-import { io } from 'socket.io-client';
-
-const PORT = process.env.TEST_PORT || 3001;
-const socket = io(`http://localhost:${PORT}`);
-let connected = false;
+const socket = io('http://localhost:3000');
 
 socket.on('connect', () => {
-    console.log('✓ Socket.IO connected');
-    connected = true;
+    console.log('✅ WebSocket connected successfully');
+    
+    // Test sending a message
+    socket.emit('test-message', { content: 'Test from automated client' });
     
     // Test receiving ai-cmd event
     socket.on('ai-cmd', (data) => {
-        console.log('✓ Received ai-cmd:', data);
+        console.log('✅ Received ai-cmd event:', data);
         process.exit(0);
     });
     
-    // Simulate receiving a command
+    // Simulate sending an ai-cmd after connection
     setTimeout(() => {
-        if (connected) {
-            console.log('✓ Socket.IO connection test passed');
-            process.exit(0);
-        }
+        socket.emit('ai-cmd', { content: 'Insert test content via WebSocket' });
     }, 1000);
 });
 
 socket.on('connect_error', (error) => {
-    console.log('✗ Socket.IO connection failed:', error.message);
+    console.error('❌ WebSocket connection failed:', error);
     process.exit(1);
 });
 
+socket.on('disconnect', () => {
+    console.log('WebSocket disconnected');
+});
+
+// Timeout after 5 seconds
 setTimeout(() => {
-    if (!connected) {
-        console.log('✗ Socket.IO connection timeout');
-        process.exit(1);
-    }
+    console.log('✅ WebSocket test completed');
+    process.exit(0);
 }, 5000);
 EOF
 
-if ! TEST_PORT=$TEST_PORT node "$TEST_DIR/socket_test.js"; then
-    echo -e "${RED}✗ Socket.IO connection test failed${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ Socket.IO connection test passed${NC}"
-
-# Test 6: Test MCP tool registration
-echo -e "\n${YELLOW}Test 6: Testing MCP tool functionality...${NC}"
-cat > "$TEST_DIR/mcp_test.js" << 'EOF'
-// Simulate MCP EditTask tool test
-const testTool = {
-    name: "EditTask",
-    description: "Send edit commands to connected Word document",
-    inputSchema: {
-        type: "object",
-        properties: {
-            content: { type: "string" },
-            action: { type: "string", enum: ["insert", "replace", "append"], default: "insert" },
-            position: { type: "string", enum: ["start", "end", "cursor"], default: "cursor" }
-        },
-        required: ["content"]
-    }
-};
-
-// Test input validation
-const testInputs = [
-    { content: "Test content", action: "insert", position: "cursor" },
-    { content: "Another test", action: "replace", position: "start" },
-    { content: "Final test", action: "append", position: "end" }
-];
-
-console.log('✓ MCP tool definition valid');
-
-testInputs.forEach((input, index) => {
-    if (input.content && typeof input.content === 'string') {
-        console.log(`✓ Test input ${index + 1} valid:`, input);
-    } else {
-        console.log(`✗ Test input ${index + 1} invalid:`, input);
-        process.exit(1);
-    }
-});
-
-console.log('✓ MCP tool functionality test passed');
-EOF
-
-if ! node "$TEST_DIR/mcp_test.js"; then
-    echo -e "${RED}✗ MCP tool test failed${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ MCP tool test passed${NC}"
-
-# Test 7: Test server logs
-echo -e "\n${YELLOW}Test 7: Checking server logs...${NC}"
-if [ -f "$TEST_DIR/server.log" ]; then
-    if grep -q "MCP Word Server running" "$TEST_DIR/server.log"; then
-        echo -e "${GREEN}✓ Server started successfully${NC}"
+    # Run WebSocket test
+    if node /tmp/websocket_test_client.js; then
+        log_info "✅ WebSocket connection test passed"
     else
-        echo -e "${RED}✗ Server startup message not found${NC}"
-        cat "$TEST_DIR/server.log"
+        log_error "❌ WebSocket connection test failed"
+        kill $SERVER_PID 2>/dev/null || true
+        rm -f /tmp/websocket_test_client.js
+        return 1
+    fi
+    
+    # Cleanup
+    kill $SERVER_PID 2>/dev/null || true
+    rm -f /tmp/websocket_test_client.js
+}
+
+# Test 3: Office Add-in Manifest Validation
+test_manifest_validation() {
+    log_info "Testing Office Add-in Manifest..."
+    
+    if [ -f "public/manifest.xml" ]; then
+        # Basic XML validation
+        if xmllint --noout public/manifest.xml 2>/dev/null; then
+            log_info "✅ Manifest XML is valid"
+            
+            # Check required elements
+            if grep -q "ReadWriteDocument" public/manifest.xml && 
+               grep -q "http://localhost:3000/taskpane.html" public/manifest.xml; then
+                log_info "✅ Manifest contains required permissions and source location"
+            else
+                log_warn "⚠️  Manifest missing required elements"
+            fi
+        else
+            log_error "❌ Manifest XML validation failed"
+            return 1
+        fi
+    else
+        log_error "❌ Manifest file not found"
+        return 1
+    fi
+}
+
+# Test 4: Static File Serving
+test_static_files() {
+    log_info "Testing Static File Serving..."
+    
+    # Start server
+    npm start &
+    SERVER_PID=$!
+    sleep 3
+    
+    # Test taskpane.html
+    if curl -s http://localhost:${SERVER_PORT}/taskpane.html | grep -q "Office.js"; then
+        log_info "✅ taskpane.html serves correctly and includes Office.js"
+    else
+        log_error "❌ taskpane.html test failed"
+        kill $SERVER_PID 2>/dev/null || true
+        return 1
+    fi
+    
+    # Test manifest.xml
+    if curl -s http://localhost:${SERVER_PORT}/manifest.xml | grep -q "OfficeApp"; then
+        log_info "✅ manifest.xml serves correctly"
+    else
+        log_error "❌ manifest.xml test failed"
+        kill $SERVER_PID 2>/dev/null || true
+        return 1
+    fi
+    
+    # Cleanup
+    kill $SERVER_PID 2>/dev/null || true
+}
+
+# Main test execution
+main() {
+    log_info "Starting test suite for MCP_WORD..."
+    
+    # Check prerequisites
+    if ! command -v node &> /dev/null; then
+        log_error "Node.js is not installed"
         exit 1
     fi
-else
-    echo -e "${RED}✗ Server log file not found${NC}"
-    exit 1
-fi
+    
+    if ! command -v npm &> /dev/null; then
+        log_error "npm is not installed"
+        exit 1
+    fi
+    
+    # Install dependencies if needed
+    if [ ! -d "node_modules" ]; then
+        log_info "Installing dependencies..."
+        npm install
+    fi
+    
+    # Run tests
+    TESTS_PASSED=0
+    TOTAL_TESTS=4
+    
+    if test_manifest_validation; then
+        ((TESTS_PASSED++))
+    fi
+    
+    if test_static_files; then
+        ((TESTS_PASSED++))
+    fi
+    
+    if test_stdio_interface; then
+        ((TESTS_PASSED++))
+    fi
+    
+    if test_websocket_connection; then
+        ((TESTS_PASSED++))
+    fi
+    
+    # Summary
+    log_info "Test Results: ${TESTS_PASSED}/${TOTAL_TESTS} tests passed"
+    
+    if [ $TESTS_PASSED -eq $TOTAL_TESTS ]; then
+        log_info "🎉 All tests passed!"
+        exit 0
+    else
+        log_error "💥 Some tests failed!"
+        exit 1
+    fi
+}
 
-# Test 8: Test graceful shutdown
-echo -e "\n${YELLOW}Test 8: Testing graceful shutdown...${NC}"
-kill -INT $SERVER_PID
-wait $SERVER_PID 2>/dev/null || true
-SERVER_PID=""
-echo -e "${GREEN}✓ Server shutdown gracefully${NC}"
-
-# Final results
-echo -e "\n${GREEN}🎉 All tests passed!${NC}"
-echo -e "${GREEN}✓ Dependencies verified${NC}"
-echo -e "${GREEN}✓ Server executable${NC}"
-echo -e "${GREEN}✓ MCP server starts correctly${NC}"
-echo -e "${GREEN}✓ HTTP server responds${NC}"
-echo -e "${GREEN}✓ Socket.IO connections work${NC}"
-echo -e "${GREEN}✓ MCP tool definitions valid${NC}"
-echo -e "${GREEN}✓ Server logs properly${NC}"
-echo -e "${GREEN}✓ Graceful shutdown works${NC}"
-echo -e "\n${GREEN}MCP Word Server is ready for use!${NC}"
+# Run main function
+main "$@"

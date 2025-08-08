@@ -42,6 +42,7 @@ flowchart LR
 - Implements basic error handling
 
 ## 4. Workflow
+1. STDIO from Claude CLI or fake master, use unix pipeline to provide input
 1. Start the proxy server: `npm install && npm start`
 2. Sideload the Add-in manifest in Word
 3. Send `EditTask` requests via Claude CLI or another service, e.g. `{ content: '...' }`
