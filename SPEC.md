@@ -57,5 +57,14 @@ flowchart LR
 - STDIO: use shell pipeline to provide input
 - socket: generate a test javascript as a socket client
 - before test, prepare package.json
+- NEW: You can pipe custom MCP JSONL into test.sh, one JSON object per line (script auto-sends initialize + notifications/initialized)
+  Example:
+  echo '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"PipeMsg","action":"insert","target":"selection"}}}' | ./test.sh
+  Multiple lines:
+  cat <<'EOF' | ./test.sh
+  {"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}}}
+  {"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"FromSTDIN","action":"insert","target":"selection"}}}
+  EOF
+  The script extracts expected content from the first editTask; if none provided, the first ai-cmd event counts as success.
 ## 8. Doc
 - README.md for use step-by-step stall and run

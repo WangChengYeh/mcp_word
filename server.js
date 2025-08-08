@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import process from "process";
 import { fileURLToPath } from "url";
+import { z } from "zod";
 
 // MCP SDK
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -45,7 +46,8 @@ function log(...args) {
   const line = `[${new Date().toISOString()}] ${args
     .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
     .join(" ")}`;
-  console.log(line);
+  // IMPORTANT: write logs to stderr to keep stdout clean for MCP stdio
+  console.error(line);
   if (DEBUG) {
     fs.appendFile(debugLogPath, line + "\n", () => {});
   }
@@ -115,35 +117,19 @@ mcp.registerTool(
     description:
       "Send an edit task to the Office Add-in via WebSocket (event: ai-cmd).",
     inputSchema: {
-      type: "object",
-      properties: {
-        content: {
-          type: "string",
-          description: "Text to insert/replace in the Word document.",
-        },
-        action: {
-          type: "string",
-          description: "insert | replace | append",
-          enum: ["insert", "replace", "append"],
-          default: "insert",
-        },
-        target: {
-          type: "string",
-          description: "cursor | selection | document",
-          enum: ["cursor", "selection", "document"],
-          default: "selection",
-        },
-        taskId: {
-          type: "string",
-          description: "Optional client-correlated id.",
-        },
-        meta: {
-          type: "object",
-          description: "Optional additional metadata.",
-        },
-      },
-      required: ["content"],
-      additionalProperties: true,
+      content: z
+        .string()
+        .describe("Text to insert/replace in the Word document."),
+      action: z
+        .enum(["insert", "replace", "append"])
+        .default("insert")
+        .describe("insert | replace | append"),
+      target: z
+        .enum(["cursor", "selection", "document"]) 
+        .default("selection")
+        .describe("cursor | selection | document"),
+      taskId: z.string().optional().describe("Optional client-correlated id."),
+      meta: z.record(z.unknown()).optional().describe("Optional additional metadata."),
     },
   },
   async (args, _ctx) => {
@@ -178,11 +164,7 @@ mcp.registerTool(
   {
     description: "Health check tool.",
     inputSchema: {
-      type: "object",
-      properties: {
-        message: { type: "string" },
-      },
-      additionalProperties: false,
+      message: z.string().optional(),
     },
   },
   async (args, _ctx) => {
@@ -200,6 +182,19 @@ async function main() {
       resolve();
     });
   });
+
+  // 在 debug 模式下，監看 STDIN 原始資料以協助除錯 MCP 流
+  if (DEBUG) {
+    try {
+      process.stdin.on("data", (chunk) => {
+        // 只印前 200 字元避免洗版
+        const s = chunk.toString("utf8");
+        console.error(`[DEBUG stdin] ${s.slice(0, 200).replace(/\n/g, "\\n")}${
+          s.length > 200 ? "..." : ""
+        }`);
+      });
+    } catch {}
+  }
 
   // 連線 MCP STDIO
   const transport = new StdioServerTransport();
