@@ -52,7 +52,7 @@ For Claude Desktop, add to your MCP configuration:
 
 For Claude CLI:
 ```bash
-claude mcp add mcp_word "node /workspaces/mcp_word/server.js"
+claude mcp add mcp_word -- node /workspaces/mcp_word/server.js
 ```
 
 ### 3. Install Office Add-in

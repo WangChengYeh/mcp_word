@@ -55,23 +55,31 @@ const server = new McpServer(
   }
 );
 
-// Register the EditTask tool
-server.tool("EditTask", "Send edit commands to connected Word document", {
-  content: {
-    type: "string",
-    description: "Content to insert or edit in the Word document"
-  },
-  action: {
-    type: "string",
-    description: "Action to perform (insert, replace, append)",
-    enum: ["insert", "replace", "append"],
-    default: "insert"
-  },
-  position: {
-    type: "string",
-    description: "Position to perform action (start, end, cursor)",
-    enum: ["start", "end", "cursor"],
-    default: "cursor"
+// Register the EditTask tool using server.registerTool
+server.registerTool({
+  name: "EditTask",
+  description: "Send edit commands to connected Word document",
+  inputSchema: {
+    type: "object",
+    properties: {
+      content: {
+        type: "string",
+        description: "Content to insert or edit in the Word document"
+      },
+      action: {
+        type: "string",
+        description: "Action to perform (insert, replace, append)",
+        enum: ["insert", "replace", "append"],
+        default: "insert"
+      },
+      position: {
+        type: "string",
+        description: "Position to perform action (start, end, cursor)",
+        enum: ["start", "end", "cursor"],
+        default: "cursor"
+      }
+    },
+    required: ["content"]
   }
 }, async ({ content, action = "insert", position = "cursor" }) => {
   try {

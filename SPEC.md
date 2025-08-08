@@ -20,7 +20,6 @@ flowchart LR
 ## 3. Components
 
 ### 3.1 MCP Server (`server.js`)
-- Stack:
   1. McpServer (@modelcontextprotocol/sdk/server/mcp.js
   2. StdioServerTransport from "@modelcontextprotocol/sdk/server/stdio.js"
   3. server.registerTool to add Tool in MCP server
@@ -51,3 +50,6 @@ flowchart LR
 ## 5. Extensibility
 - Support additional `EditTask` types (tables, images, formatting)
 - Add WebSocket authentication, logging, and error tracking
+
+## 6. Test
+- test.sh Unit test, without AI or word
