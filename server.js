@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { Server } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioTransport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Server as SocketIOServer } from "socket.io";
 import { createServer } from "http";
 import express from "express";
@@ -43,7 +43,7 @@ io.on('connection', (socket) => {
 });
 
 // Create MCP server
-const server = new Server(
+const server = new McpServer(
   {
     name: "mcp-word-server",
     version: "1.0.0",
@@ -125,7 +125,7 @@ httpServer.listen(PORT, () => {
 });
 
 // Start MCP server with stdio transport
-const transport = new StdioTransport();
+const transport = new StdioServerTransport();
 server.connect(transport).catch((error) => {
   console.error("Failed to start MCP server:", error);
   process.exit(1);

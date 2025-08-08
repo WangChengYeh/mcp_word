@@ -21,8 +21,10 @@ flowchart LR
 
 ### 3.1 MCP Server (`server.js`)
 - Stack:
-  1. Claude MCP TypeScript SDK (@modelcontextprotocol/sdk/server/mcp.js stdio
-  2. office add-in: socket.io
+  1. McpServer (@modelcontextprotocol/sdk/server/mcp.js
+  2. StdioServerTransport from "@modelcontextprotocol/sdk/server/stdio.js"
+  3. server.registerTool to add Tool in MCP server
+  4. office add-in: socket.io
 
 ### 3.2 Office Add-in (public/)
 #### `manifest.xml`
