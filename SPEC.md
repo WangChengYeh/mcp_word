@@ -52,4 +52,4 @@ flowchart LR
 - Add WebSocket authentication, logging, and error tracking
 
 ## 6. Test
-- test.sh Unit test, without AI or word
+- test.sh Unit test, Fake STDIO and socket connection

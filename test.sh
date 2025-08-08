@@ -60,7 +60,12 @@ echo -e "${GREEN}✓ server.js exists and is executable${NC}"
 # Test 3: Start server in background
 echo -e "\n${YELLOW}Test 3: Starting MCP server...${NC}"
 mkdir -p "$TEST_DIR/public"
-echo '{"name":"test","version":"1.0.0","type":"module","dependencies":{}}' > "$TEST_DIR/package.json"
+echo '{"name":"test","version":"1.0.0","type":"module","dependencies":{"socket.io-client":"^4.8.1"}}' > "$TEST_DIR/package.json"
+
+# Install dependencies in test directory
+cd "$TEST_DIR"
+npm install --silent > /dev/null 2>&1
+cd - > /dev/null
 
 # Start server with test port
 PORT=$TEST_PORT node server.js > "$TEST_DIR/server.log" 2>&1 &

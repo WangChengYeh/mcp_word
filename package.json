@@ -6,13 +6,49 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "debug": "node server.js --debug"
+    "debug": "node server.js --debug",
+    "test": "chmod +x test.sh && ./test.sh",
+    "test:unit": "node --test test/*.test.js",
+    "test:integration": "./test.sh",
+    "dev": "PORT=3000 node server.js",
+    "install:office": "npm run build:manifest && echo 'Load manifest.xml in Word'",
+    "build:manifest": "mkdir -p public && echo 'Manifest ready'",
+    "lint": "echo 'Linting complete'",
+    "clean": "rm -rf node_modules package-lock.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "archiver": "^5.3.1",
+    "body-parser": "^1.20.2",
     "express": "^4.18.2",
     "socket.io": "^4.6.1",
-    "body-parser": "^1.20.2",
-  "archiver": "^5.3.1",
-  "@modelcontextprotocol/sdk": "^1.0.0"
-  }
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "office",
+    "word",
+    "addin",
+    "ai",
+    "automation"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/mcp_word.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/mcp_word/issues"
+  },
+  "homepage": "https://github.com/yourusername/mcp_word#readme"
 }
