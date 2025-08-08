@@ -1,198 +1,121 @@
-# MCP Word Add-in
+# MCP Word Server
 
-A Model Context Protocol (MCP) server that enables AI-driven document editing workflows in Microsoft Word through a proxy server and Office.js Add-in.
+A Model Context Protocol (MCP) server that enables AI-driven document editing workflows with Microsoft Word through Office.js Add-ins.
 
-## Overview
+## Architecture
 
-This project consists of:
-- **MCP Server**: Node.js proxy server that implements MCP protocol and serves the Word Add-in
-- **Office Add-in**: Client-side application that runs in Word's task pane and applies AI-generated edits
+This server combines two communication protocols:
+- **MCP over stdio**: For AI clients (like Claude CLI) to send EditTask commands
+- **Socket.IO over HTTP**: For real-time communication with Word Office Add-ins
 
 ```mermaid
 flowchart LR
-  CLI/AI --> Proxy[server.js Proxy Server]
-  Proxy --> Browser[Office.js Task Pane]
+  CLI[Claude CLI/AI Client] -->|stdio| MCP[MCP Server]
+  MCP -->|Socket.IO| Browser[Office.js Task Pane]
   Browser --> Word[Word Document]
 ```
 
-## Features
-
-- Real-time document editing through AI commands
-- WebSocket-based communication between server and Add-in
-- MCP protocol compliance for integration with AI tools
-- Office.js integration for seamless Word document manipulation
-
-## Prerequisites
-
-- Node.js 18+ 
-- Microsoft Word (Desktop or Online)
-- Claude CLI or compatible MCP client
-
 ## Installation
 
-1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd mcp_word
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start the MCP Server:
-```bash
-npm start
-```
-
-The server will start on `http://localhost:3000` by default.
-
-4. Configure Claude MCP client:
-
-Add the MCP server to Claude using HTTP transport:
-
-```bash
-# Add the Word Editor MCP server
-claude mcp add word-editor \
-  --transport http \
-  socket "http://localhost:3000/mcp"
-
-# Verify the server was added
-claude mcp list
-```
-
-For custom port configuration:
-
-```bash
-# If running server on different port
-PORT=4000 npm start
-
-# Then configure Claude with custom URL
-claude mcp add word-editor \
-  --transport http \
-  socket "http://localhost:4000/mcp"
+npm install @modelcontextprotocol/sdk socket.io express
 ```
 
 ## Usage
 
-### 1. Sideload the Word Add-in
-
-#### For Word Desktop:
-1. Open Word
-2. Go to Insert > My Add-ins > Upload My Add-in
-3. Select the `public/manifest.xml` file
-4. The Add-in will appear in your task pane
-
-#### For Word Online:
-1. Open Word Online
-2. Go to Insert > Office Add-ins > Upload My Add-in
-3. Select the `public/manifest.xml` file
-
-### 2. Connect MCP Client
-
-#### Using Claude MCP commands:
+### 1. Start the MCP Server
 
 ```bash
-# Connect to the configured server
-claude mcp connect word-editor
-
-# Use the EditTask tool directly
-claude mcp call word-editor EditTask \
-  --content "Insert a professional summary about AI technology at the beginning of the document."
-
-# Interactive mode with MCP server
-claude --mcp word-editor
+node server.js
 ```
 
-#### Example Claude MCP Commands:
+The server will:
+- Start MCP server listening on stdio for AI clients
+- Start HTTP server on port 3000 for Office Add-in connections
+- Serve static files from the `public/` directory
 
-```bash
-# Insert text at cursor
-claude mcp call word-editor EditTask \
-  --content "Add a new paragraph about machine learning applications."
+### 2. Configure MCP Client
 
-# Replace selected text  
-claude mcp call word-editor EditTask \
-  --content "Replace the current selection with: Artificial Intelligence is revolutionizing modern business processes."
+For Claude Desktop, add to your MCP configuration:
 
-# Format and style text
-claude mcp call word-editor EditTask \
-  --content "Make the first paragraph bold and add a professional heading: Executive Summary"
-```
-
-#### Remove MCP server configuration:
-
-```bash
-# Remove the server configuration
-claude mcp remove word-editor
-```
-
-### 3. Document Editing
-
-The Add-in will automatically:
-- Receive edit commands via WebSocket
-- Apply changes to the active Word document
-- Handle text insertion, replacement, and formatting
-
-## MCP Server API
-
-### Tools
-
-#### EditTask
-Processes document edit requests and forwards them to the Word Add-in.
-
-**Parameters:**
-- `content` (string): The text content to insert or edit instructions
-
-**Example:**
 ```json
 {
-  "content": "Replace the first paragraph with a professional introduction about machine learning."
+  "mcpServers": {
+    "mcp-word": {
+      "command": "node",
+      "args": ["/workspaces/mcp_word/server.js"],
+      "cwd": "/workspaces/mcp_word"
+    }
+  }
 }
 ```
+
+For Claude CLI:
+```bash
+claude mcp add mcp_word "node /workspaces/mcp_word/server.js"
+```
+
+### 3. Install Office Add-in
+
+1. Open Microsoft Word
+2. Navigate to the Add-ins section
+3. Sideload the manifest from `public/manifest.xml`
+4. The add-in will connect to `http://localhost:3000`
+
+### 4. Send Edit Commands
+
+Use the `EditTask` tool through your MCP client:
+
+```javascript
+// Example: Insert text at cursor position
+{
+  "tool": "EditTask",
+  "arguments": {
+    "content": "Hello from AI!",
+    "action": "insert",
+    "position": "cursor"
+  }
+}
+```
+
+## EditTask Tool Parameters
+
+- **content** (required): Text content to insert or edit
+- **action** (optional): `"insert"` (default), `"replace"`, or `"append"`
+- **position** (optional): `"cursor"` (default), `"start"`, or `"end"`
 
 ## Development
 
 ### Project Structure
-
 ```
-mcp_word/
-├── server.js           # MCP server and Express static server
-├── public/
-│   ├── manifest.xml    # Office Add-in manifest
-│   ├── taskpane.html   # Add-in UI
-│   └── taskpane.js     # Add-in logic and WebSocket client
-├── package.json
-├── SPEC.md            # Technical specification
-└── README.md          # This file
+/workspaces/mcp_word/
+├── server.js          # MCP server with Socket.IO integration
+├── public/            # Office Add-in files
+│   ├── manifest.xml   # Office Add-in manifest
+│   ├── taskpane.html  # Add-in UI
+│   └── taskpane.js    # Add-in logic
+└── README.md
 ```
 
-### Key Components
+### Environment Variables
 
-- **server.js**: Implements MCP protocol using `@modelcontextprotocol/sdk`
-- **taskpane.js**: Handles Office.js integration and WebSocket communication
-- **manifest.xml**: Defines Add-in metadata and permissions
+- `PORT`: HTTP server port (default: 3000)
 
-### Configuration
+### Logging
 
-The server accepts the following environment variables:
-
-- `PORT`: Server port (default: 3000)
-- `HOST`: Server host (default: localhost)
-
-### Debugging
-
-1. **Server logs**: Check console output for MCP and WebSocket events
-2. **Add-in debugging**: Use browser dev tools in Word (F12)
-3. **Office.js errors**: Monitor the task pane console for Office API issues
+The server logs to stderr:
+- MCP server status and errors
+- Socket.IO client connections/disconnections
+- EditTask command execution
 
 ## Troubleshooting
 
-### Common Issues
+1. **No Word clients connected**: Ensure the Office Add-in is loaded in Word and can reach `http://localhost:3000`
 
-**Add-in not loading:**
-- Verify the server is running on port 3000
-- Check that `manifest.xml` points to the correct URL
-- Ensure Word has internet connectivity
-**WebSocket connection failed:**- Confirm the server is accessible at `http://localhost:3000`- Check firewall settings- Verify WebSocket support in your environment**MCP client connection issues:**- Ensure the server is running (`npm start`)- Check that the MCP client supports HTTP transport- Verify the server URL is accessible at `http://localhost:3000/mcp`- Verify command syntax and parameters### LogsServer logs will show:- MCP protocol messages- WebSocket connections- Edit command processing- Error details## Extensibility### Adding New Edit TypesExtend the `EditTask` tool to support:- Table manipulation- Image insertion- Advanced formatting- Document structure changes### Enhanced Features- Authentication and authorization- Multi-user collaboration- Edit history and versioning- Custom AI model integration## License[Your License Here]## Contributing1. Fork the repository2. Create a feature branch3. Make your changes4. Test with Word Add-in5. Submit a pull request## SupportFor issues and questions:- Check the troubleshooting section- Review server logs- Test with minimal reproduction cases- Report bugs with detailed environment information
+2. **MCP connection issues**: Verify the MCP client configuration and that `server.js` is executable
+
+3. **CORS errors**: The server allows all origins by default, but firewall settings may block connections
+
+## License
+
+MIT

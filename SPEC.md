@@ -6,13 +6,13 @@
 # Author: Your Name
 
 ## 1. Introduction
-The MCP Word Add-in uses a Node.js proxy server (`server.js`) alongside an Office.js Word Add-in client (`public/`) to enable AI-driven document editing workflows.
+MCP_WORD build a MCP server (`server.js`) alongside an Office.js Word Add-in client to enable AI-driven document editing workflows.
 
 ## 2. Architecture Overview
 ```mermaid
 flowchart LR
-  CLI/AI --> Proxy[Proxy Server (server.js)]
-  Proxy --> Browser[Office.js Task Pane]
+  CLI/AI --> MCP Server
+  MCP Server --> Browser[Office.js Task Pane]
   Browser --> Word[Word Document]
 ```
 
@@ -20,17 +20,9 @@ flowchart LR
 ## 3. Components
 
 ### 3.1 MCP Server (`server.js`)
-- Stack: Node.js (ESM), Express (static hosting), Claude MCP TypeScript SDK (@modelcontextprotocol/sdk/server/mcp.js and @modelcontextprotocol/sdk/server/sse.js)
-- Responsibilities:
-  1. Serve static resources (`manifest.xml`, `taskpane.html`, `taskpane.js`) via Express
-  2. Instance an McpServer and registerTool an `EditTask`:
-     - Receive edit requests from CLI or an AI agent and interact with the AI model
-     - Forward to Office Add-in
-     - Return the edit results from the Office Add-in
-- Startup: `node server.js` (listens on port 3000 by default)
-  1. express app
-  2. URL /mcp using SSE (Server-Sent Events) and then connect to mcp server
-  3. URL /office for office add-in: socket.io
+- Stack:
+  1. Claude MCP TypeScript SDK (@modelcontextprotocol/sdk/server/mcp.js stdio
+  2. office add-in: socket.io
 
 ### 3.2 Office Add-in (public/)
 #### `manifest.xml`
