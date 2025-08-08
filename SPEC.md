@@ -11,9 +11,7 @@ MCP_WORD build a MCP server (`node server.js`) alongside an Office.js Word Add-i
 ## 2. Architecture Overview
 ```mermaid
 flowchart LR
-  CLI/AI --> MCP[MCP Server]
-  MCP --> Browser[office.js in Office Task Pane]
-  Browser --> Word[Word Document]
+  Claude CLI -- (stdio) -- MCP Server -- (WebSocket) -- Office.js
 ```
 
 
@@ -42,11 +40,11 @@ flowchart LR
 - Implements basic error handling
 
 ## 4. Workflow
-1. STDIO from Claude CLI or fake master, use unix pipeline to provide input
-1. Start the proxy server: `npm install && npm start`
-2. Sideload the Add-in manifest in Word
-3. Send `EditTask` requests via Claude CLI or another service, e.g. `{ content: '...' }`
-4. The Add-in client receives edits in real time and applies them to the document
+1. install the MCP server: `npm install`
+2. STDIO from Claude CLI or fake master, use unix pipeline to provide input
+3. Sideload the Add-in manifest in Word
+4. Send `EditTask` requests via Claude CLI or another service, e.g. `{ content: '...' }`
+5. The Add-in client receives edits in real time and applies them to the document
 
 ## 5. Extensibility
 - Support additional `EditTask` types (tables, images, formatting)
