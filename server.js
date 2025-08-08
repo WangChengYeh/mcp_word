@@ -1,412 +1,229 @@
 #!/usr/bin/env node
 
+// Minimal MCP-like server over STDIO + Socket.IO bridge per SPEC.md
+
+import express from "express";
+import http from "http";
+import { Server as IOServer } from "socket.io";
+import fs from "fs";
+import path from "path";
+import process from "process";
+import { fileURLToPath } from "url";
+
+// MCP SDK
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Server as SocketIOServer } from 'socket.io';
-import http from 'http';
-import fs from 'fs';
 
-const DEBUG = process.argv.includes('--debug');
-const PORT = 3000;
+// ---------- CLI args ----------
+const argv = process.argv.slice(2);
+const hasFlag = (name) => argv.includes(`--${name}`);
+const getFlagVal = (name, def) => {
+  const idx = argv.indexOf(`--${name}`);
+  if (idx >= 0 && idx + 1 < argv.length && !argv[idx + 1].startsWith("--")) {
+    return argv[idx + 1];
+  }
+  return def;
+};
+if (hasFlag("help")) {
+  console.log(
+    [
+      "Usage: node server.js [--port 3000] [--debug]",
+      "",
+      "Options:",
+      "  --port   HTTP/Socket.IO 監聽的埠號（預設 3000）",
+      "  --debug  啟用除錯日誌（寫入 debug.log）",
+    ].join("\n")
+  );
+  process.exit(0);
+}
+const PORT = parseInt(getFlagVal("port", "3000"), 10);
+const DEBUG = hasFlag("debug");
 
-// Debug logging function
-function debugLog(message, data = null) {
+// ---------- logger ----------
+const debugLogPath = path.join(process.cwd(), "debug.log");
+function log(...args) {
+  const line = `[${new Date().toISOString()}] ${args
+    .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+    .join(" ")}`;
+  console.log(line);
   if (DEBUG) {
-    const timestamp = new Date().toISOString();
-    const logEntry = `[${timestamp}] ${message}${data ? '\n' + JSON.stringify(data, null, 2) : ''}\n`;
-    fs.appendFileSync('debug.log', logEntry);
-    console.error(`DEBUG: ${message}`, data || '');
+    fs.appendFile(debugLogPath, line + "\n", () => {});
+  }
+}
+function logErr(err, ctx = "error") {
+  const msg =
+    err && err.stack
+      ? err.stack
+      : typeof err === "string"
+      ? err
+      : JSON.stringify(err);
+  console.error(`[${new Date().toISOString()}] ${ctx}: ${msg}`);
+  if (DEBUG) {
+    fs.appendFile(
+      debugLogPath,
+      `[${new Date().toISOString()}] ${ctx}: ${msg}\n`,
+      () => {}
+    );
   }
 }
 
-// Create HTTP server for Socket.io
-const httpServer = http.createServer((req, res) => {
-  if (req.url === '/taskpane.html') {
-    // Serve taskpane.html for Office Add-in
-    try {
-      const html = fs.readFileSync('./public/taskpane.html', 'utf8');
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(html);
-    } catch (error) {
-      debugLog('Error serving taskpane.html', { error: error.message });
-      res.writeHead(404);
-      res.end('File not found');
-    }
-  } else if (req.url === '/taskpane.js') {
-    // Serve taskpane.js
-    try {
-      const js = fs.readFileSync('./public/taskpane.js', 'utf8');
-      res.writeHead(200, { 'Content-Type': 'application/javascript' });
-      res.end(js);
-    } catch (error) {
-      debugLog('Error serving taskpane.js', { error: error.message });
-      res.writeHead(404);
-      res.end('File not found');
-    }
-  } else {
-    res.writeHead(404);
-    res.end('Not found');
+// ---------- HTTP + Socket.IO ----------
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(express.json());
+
+// 公開目錄：public/（符合 SPEC 的 Office Add-in 靜態檔）
+const publicDir = path.join(process.cwd(), "public");
+app.use(express.static(publicDir));
+
+// 健康檢查端點
+app.get("/healthz", (req, res) => {
+  try {
+    const clients = io.engine ? io.engine.clientsCount : 0;
+    res.json({ ok: true, clients, port: PORT });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
   }
 });
 
-// Setup Socket.io server
-const io = new SocketIOServer(httpServer, {
+const server = http.createServer(app);
+const io = new IOServer(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
-
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  debugLog('Office Add-in connected', { socketId: socket.id });
-  
-  socket.on('disconnect', () => {
-    debugLog('Office Add-in disconnected', { socketId: socket.id });
-  });
-  
-  socket.on('error', (error) => {
-    debugLog('Socket error', { socketId: socket.id, error: error.message });
-  });
-  
-  socket.on('ready', (data) => {
-    debugLog('Add-in ready', { socketId: socket.id, data });
-  });
-});
-
-// Start HTTP server
-httpServer.listen(PORT, () => {
-  debugLog(`Server listening on http://localhost:${PORT}`);
-});
-
-// Create MCP Server
-const server = new McpServer(
-  {
-    name: "mcp-word-server",
-    version: "1.0.0",
   },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
+});
 
-// Register EditTask tool
-server.registerTool(
+io.on("connection", (socket) => {
+  log("socket connected", { id: socket.id });
+  socket.on("disconnect", (reason) => {
+    log("socket disconnected", { id: socket.id, reason });
+  });
+});
+
+// ---------- MCP Server (STDIO) ----------
+const mcp = new McpServer({
+  name: "mcp-word",
+  version: "1.0.0",
+});
+
+// 工具：editTask -> 透過 ai-cmd 廣播給 Add-in
+mcp.registerTool(
   {
-    name: "edit_document",
-    description: "Send edit commands to Word document via Office Add-in",
+    name: "editTask",
+    description:
+      "Send an edit task to the Office Add-in via WebSocket (event: ai-cmd).",
     inputSchema: {
       type: "object",
       properties: {
         content: {
           type: "string",
-          description: "Text content to insert or edit"
+          description: "Text to insert/replace in the Word document.",
         },
         action: {
           type: "string",
+          description: "insert | replace | append",
           enum: ["insert", "replace", "append"],
-          description: "Type of edit action",
-          default: "insert"
+          default: "insert",
         },
-        position: {
+        target: {
           type: "string",
-          enum: ["cursor", "start", "end", "selection"],
-          description: "Position for the edit",
-          default: "cursor"
-        }
+          description: "cursor | selection | document",
+          enum: ["cursor", "selection", "document"],
+          default: "selection",
+        },
+        taskId: {
+          type: "string",
+          description: "Optional client-correlated id.",
+        },
+        meta: {
+          type: "object",
+          description: "Optional additional metadata.",
+        },
       },
-      required: ["content"]
+      required: ["content"],
+      additionalProperties: true,
     },
   },
-  async (request) => {
+  async (args, _ctx) => {
     try {
-      debugLog('Received edit_document request', request);
-      
-      const { content, action = "insert", position = "cursor" } = request.params.arguments;
-      
-      // Create EditTask
-      const editTask = {
-        content,
-        action,
-        position,
-        timestamp: new Date().toISOString()
+      const payload = {
+        type: "EditTask",
+        content: args.content,
+        action: args.action || "insert",
+        target: args.target || "selection",
+        taskId: args.taskId || null,
+        meta: args.meta || {},
+        ts: Date.now(),
       };
-      
-      // Send to all connected Office Add-ins via Socket.io
-      io.emit('ai-cmd', editTask);
-      
-      debugLog('Sent EditTask to Office Add-ins', editTask);
-      
+      io.emit("ai-cmd", payload);
+      log("emitted ai-cmd", payload);
       return {
-        content: [
-          {
-            type: "text",
-            text: `Edit command sent: ${action} "${content}" at ${position}`
-          }
-        ]
+        content: [{ type: "text", text: "EditTask sent to client." }],
       };
-      
-    } catch (error) {
-      debugLog('Error in edit_document tool', { error: error.message, stack: error.stack });
-      
+    } catch (e) {
+      logErr(e, "editTask");
       return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error.message}`
-          }
-        ],
-        isError: true
+        isError: true,
+        content: [{ type: "text", text: `editTask failed: ${String(e)}` }],
       };
     }
   }
 );
 
-// Register additional tool for document info
-server.registerTool(
+// 工具：ping -> 回傳 pong 或輸入訊息
+mcp.registerTool(
   {
-    name: "get_document_status",
-    description: "Get current document status from Office Add-in",
+    name: "ping",
+    description: "Health check tool.",
     inputSchema: {
       type: "object",
-      properties: {}
+      properties: {
+        message: { type: "string" },
+      },
+      additionalProperties: false,
     },
   },
-  async (request) => {
-    try {
-      debugLog('Received get_document_status request');
-      
-      // Request status from Office Add-ins
-      io.emit('get-status', { timestamp: new Date().toISOString() });
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: "Document status request sent to Office Add-in"
-          }
-        ]
-      };
-      
-    } catch (error) {
-      debugLog('Error in get_document_status tool', { error: error.message });
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error.message}`
-          }
-        ],
-        isError: true
-      };
-    }
+  async (args, _ctx) => {
+    const text = args?.message || "pong";
+    return { content: [{ type: "text", text }] };
   }
 );
 
-// Global error handling
-process.on('uncaughtException', (error) => {
-  debugLog('Uncaught exception', { error: error.message, stack: error.stack });
+// ---------- bootstrap ----------
+async function main() {
+  // 啟動 HTTP/Socket
+  await new Promise((resolve) => {
+    server.listen(PORT, () => {
+      log(`HTTP/Socket.IO listening on http://localhost:${PORT}`);
+      resolve();
+    });
+  });
+
+  // 連線 MCP STDIO
+  const transport = new StdioServerTransport();
+  await mcp.connect(transport);
+  log("MCP server connected via STDIO");
+
+  // 優雅關閉
+  const shutdown = async (signal = "SIGTERM") => {
+    try {
+      log(`shutting down (${signal})...`);
+      server.close(() => log("HTTP server closed"));
+      if (io && io.close) io.close();
+      if (transport && transport.close) await transport.close();
+    } catch (e) {
+      logErr(e, "shutdown");
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+}
+
+main().catch((e) => {
+  logErr(e, "bootstrap");
   process.exit(1);
 });
-
-process.on('unhandledRejection', (reason, promise) => {
-  debugLog('Unhandled rejection', { reason, promise });
-});
-
-// Initialize MCP server with STDIO transport
-async function main() {
-  try {
-    debugLog('Starting MCP Word Server');
-    
-    // Create STDIO transport for MCP communication
-    const transport = new StdioServerTransport();
-    
-    // Connect MCP server
-    await server.connect(transport);
-    
-    debugLog('MCP server connected and ready for STDIO communication');
-    
-  } catch (error) {
-    debugLog('Failed to start MCP server', { error: error.message, stack: error.stack });
-    process.exit(1);
-  }
-}
-
-// Start the server
-main();
-    }
-}
-
-// Express and Socket.io Setup
-function createWebServer(mcpServer) {
-    const app = express();
-    const server = http.createServer(app);
-    const io = new Server(server, {
-        cors: {
-            origin: "*",
-            methods: ["GET", "POST"]
-        }
-    });
-
-    // Set socket.io reference in MCP server
-    mcpServer.setSocketIO(io);
-
-    // Serve static files
-    app.use(express.static(path.join(__dirname, 'public')));
-
-    // Health check endpoint
-    app.get('/health', (req, res) => {
-        res.json({
-            status: 'healthy',
-            timestamp: new Date().toISOString(),
-            connectedClients: mcpServer.socketClients.size
-        });
-    });
-
-    // Socket.io connection handling with enhanced error tracking
-    io.on('connection', (socket) => {
-        logger.info(`Office client connected: ${socket.id}`);
-        mcpServer.socketClients.add(socket);
-
-        // Enhanced client identification with Office.js info
-        socket.on('client-info', (data) => {
-            logger.info('Office client info received', { 
-                socketId: socket.id, 
-                officeVersion: data.officeVersion,
-                platform: data.platform,
-                host: data.host
-            });
-        });
-
-        // Handle command execution results
-        socket.on('command-result', (data) => {
-            logger.info('Command execution result', { 
-                socketId: socket.id, 
-                commandId: data.commandId,
-                success: data.success,
-                error: data.error 
-            });
-        });
-
-        // Enhanced document status with Word-specific info
-        socket.on('document-status', (data) => {
-            logger.debug('Document status update', { 
-                socketId: socket.id, 
-                documentName: data.documentName,
-                wordCount: data.wordCount,
-                selectionRange: data.selectionRange
-            });
-        });
-
-        // WebSocket authentication placeholder
-        socket.on('authenticate', (token) => {
-            // TODO: Implement authentication logic
-            logger.debug('Authentication attempt', { socketId: socket.id });
-            socket.emit('auth-result', { success: true, message: 'Authentication not yet implemented' });
-        });
-
-        // Handle client errors
-        socket.on('client-error', (error) => {
-            logger.error('Client reported error', { socketId: socket.id, error });
-        });
-
-        // Handle test messages
-        socket.on('test-message', (data) => {
-            logger.debug('Test message received', { socketId: socket.id, data });
-            socket.emit('test-response', { 
-                message: 'Test message received successfully',
-                timestamp: new Date().toISOString()
-            });
-        });
-
-        socket.on('disconnect', (reason) => {
-            logger.info(`Office client disconnected: ${socket.id}, reason: ${reason}`);
-            mcpServer.socketClients.delete(socket);
-        });
-    });
-
-    return { app, server, io };
-}
-
-// Enhanced main execution with better error handling
-async function main() {
-    try {
-        logger.info('Starting MCP Word Server...', { 
-            debug: DEBUG, 
-            port: PORT,
-            nodeVersion: process.version,
-            platform: process.platform
-        });
-
-        const mcpServer = new WordMCPServer();
-
-        // Check if running in STDIO mode (typical for MCP)
-        if (process.stdin.isTTY === false) {
-            // STDIO mode - start MCP server for Claude CLI integration
-            logger.info('Running in STDIO mode for MCP client (Claude CLI)');
-            await mcpServer.start();
-        } else {
-            // Interactive mode - start web server for Office Add-in
-            logger.info('Running in interactive mode with web server for Office Add-in');
-            
-            const { server } = createWebServer(mcpServer);
-            
-            server.listen(PORT, () => {
-                logger.info(`Web server started on http://localhost:${PORT}`);
-                logger.info('Office Add-in manifest URL: http://localhost:${PORT}/manifest.xml');
-                logger.info('Task pane URL: http://localhost:${PORT}/taskpane.html');
-                
-                if (DEBUG) {
-                    logger.info(`Debug mode enabled. Detailed logs written to ${DEBUG_LOG_FILE}`);
-                }
-            });
-
-            // Enhanced graceful shutdown
-            const gracefulShutdown = () => {
-                logger.info('Received shutdown signal, closing server gracefully...');
-                server.close(() => {
-                    logger.info('HTTP server closed');
-                    if (DEBUG) {
-                        logger.info('Final debug log written');
-                    }
-                    process.exit(0);
-                });
-                
-                // Force close after 10 seconds
-                setTimeout(() => {
-                    logger.error('Could not close connections in time, forcefully shutting down');
-                    process.exit(1);
-                }, 10000);
-            };
-
-            process.on('SIGINT', gracefulShutdown);
-            process.on('SIGTERM', gracefulShutdown);
-        }
-
-    } catch (error) {
-        logger.error('Failed to start server', { 
-            error: error.message, 
-            stack: error.stack 
-        });
-        process.exit(1);
-    }
-}
-
-// Handle unhandled errors
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection', { reason, promise });
-});
-
-process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception', error);
-    process.exit(1);
-});
-
-// Start the server
-main();
-
-// Export for testing
-export { WordMCPServer, Logger };

@@ -56,3 +56,6 @@ flowchart LR
 - test.sh Unit test, Fake STDIO for MCP client and socket connection for office
 - STDIO: use shell pipeline to provide input
 - socket: generate a test javascript as a socket client
+- before test, prepare package.json
+## 8. Doc
+- README.md for use step-by-step stall and run

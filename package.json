@@ -1,54 +1,24 @@
 {
   "name": "mcp_word",
   "version": "1.0.0",
-  "description": "MCP Word Add-in server and client",
+  "private": true,
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "debug": "node server.js --debug",
-    "test": "chmod +x test.sh && ./test.sh",
-    "test:unit": "node --test test/*.test.js",
-    "test:integration": "./test.sh",
-    "dev": "PORT=3000 node server.js",
-    "install:office": "npm run build:manifest && echo 'Load manifest.xml in Word'",
-    "build:manifest": "mkdir -p public && echo 'Manifest ready'",
-    "lint": "echo 'Linting complete'",
-    "clean": "rm -rf node_modules package-lock.json"
+    "dev": "node server.js --debug",
+    "test": "bash ./test.sh"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "archiver": "^5.3.1",
-    "body-parser": "^1.20.2",
-    "express": "^4.18.2",
-    "socket.io": "^4.6.1",
-    "socket.io-client": "^4.8.1"
+    "@modelcontextprotocol/sdk": "^0.6.1",
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1",
-    "concurrently": "^8.2.2",
-    "cross-env": "^7.0.3"
+    "socket.io-client": "^4.7.5"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=18.17"
   },
-  "keywords": [
-    "mcp",
-    "office",
-    "word",
-    "addin",
-    "ai",
-    "automation"
-  ],
-  "author": "Your Name",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/yourusername/mcp_word.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/mcp_word/issues"
-  },
-  "homepage": "https://github.com/yourusername/mcp_word#readme"
+  "license": "ISC"
 }
