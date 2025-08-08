@@ -10,7 +10,7 @@ This project consists of:
 
 ```mermaid
 flowchart LR
-  CLI/AI --> Proxy[Proxy Server (server.js)]
+  CLI/AI --> Proxy[Proxy Server server.js]
   Proxy --> Browser[Office.js Task Pane]
   Browser --> Word[Word Document]
 ```
