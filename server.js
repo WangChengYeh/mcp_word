@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,133 +47,13 @@ app.get('/office', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'taskpane.html'));
 });
 
-// MCP endpoint for HTTP transport - forward to MCP server
-app.use('/mcp', express.json());
-app.post('/mcp', async (req, res) => {
-  try {
-    debugLog('HTTP MCP REQUEST', 'Received HTTP request', req.body);
-    
-    const { method, params, id } = req.body;
-    
-    if (method === 'tools/call' && params?.name === 'EditTask') {
-      // Handle EditTask tool call directly
-      try {
-        const result = await handleEditTask(params.arguments);
-        
-        const response = {
-          jsonrpc: "2.0",
-          id: id,
-          result: {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result)
-              }
-            ]
-          }
-        };
-        
-        debugLog('HTTP MCP RESPONSE', 'Sending response', response);
-        res.json(response);
-      } catch (error) {
-        debugLog('HTTP MCP TOOL ERROR', error.message, error);
-        
-        const errorResponse = {
-          jsonrpc: "2.0",
-          id: id,
-          error: {
-            code: -1,
-            message: error.message
-          }
-        };
-        
-        res.status(500).json(errorResponse);
-      }
-    } else if (method === 'tools/list') {
-      // Handle tools list request
-      const response = {
-        jsonrpc: "2.0",
-        id: id,
-        result: {
-          tools: [
-            {
-              name: "EditTask",
-              description: "Edit Word document content through the Office Add-in",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  content: {
-                    type: "string",
-                    description: "The text content to insert or edit in the document"
-                  },
-                  operation: {
-                    type: "string",
-                    enum: ["insert", "replace", "append"],
-                    description: "The type of edit operation to perform",
-                    default: "insert"
-                  },
-                  position: {
-                    type: "string",
-                    enum: ["cursor", "start", "end"],
-                    description: "Where to perform the operation",
-                    default: "cursor"
-                  }
-                },
-                required: ["content"]
-              }
-            }
-          ]
-        }
-      };
-      
-      debugLog('HTTP MCP RESPONSE', 'Tools list', response);
-      res.json(response);
-    } else {
-      // Unknown method
-      const errorResponse = {
-        jsonrpc: "2.0",
-        id: id,
-        error: {
-          code: -32601,
-          message: `Method not found: ${method}`
-        }
-      };
-      
-      res.status(404).json(errorResponse);
-    }
-  } catch (error) {
-    debugLog('HTTP MCP ERROR', error.message, error);
-    res.status(500).json({ 
-      jsonrpc: "2.0",
-      id: req.body?.id,
-      error: {
-        code: -32603,
-        message: error.message
-      }
-    });
-  }
-});
-
 // Store connected Office Add-in clients
 const connectedClients = new Set();
 
-// Socket.io connection handling
-io.on('connection', (socket) => {
-  console.log('Office Add-in client connected:', socket.id);
-  connectedClients.add(socket);
+// Store pending edits for tracking
+const pendingEdits = new Map();
 
-  socket.on('disconnect', () => {
-    console.log('Office Add-in client disconnected:', socket.id);
-    connectedClients.delete(socket);
-  });
-
-  socket.on('edit-result', (data) => {
-    console.log('Edit result received:', data);
-    // Store result for MCP response if needed
-  });
-});
-
-// MCP Server setup (no stdio transport)
+// MCP Server setup
 const mcpServer = new McpServer({
   name: "mcp-word-server",
   version: "1.0.0"
@@ -194,7 +74,7 @@ if (DEBUG_MODE) {
   });
 }
 
-// EditTask handler function (extracted from mcpServer.registerTool)
+// EditTask handler function
 async function handleEditTask(args) {
   debugLog('TOOL EXECUTION', 'EditTask called', args);
 
@@ -236,7 +116,7 @@ async function handleEditTask(args) {
   });
 }
 
-// Register EditTask tool for stdio transport (if needed)
+// Register EditTask tool
 mcpServer.registerTool({
   name: "EditTask",
   description: "Edit Word document content through the Office Add-in",
@@ -255,6 +135,126 @@ mcpServer.registerTool({
       },
       position: {
         type: "string",
+        enum: ["cursor", "start", "end"],
+        description: "Where to perform the operation",
+        default: "cursor"
+      }
+    },
+    required: ["content"]
+  }
+}, handleEditTask);
+
+// MCP router using SSE (Server-Sent Events)
+const mcpRouter = express.Router();
+mcpRouter.use(express.json());
+
+// Create SSE transport for MCP
+const sseTransport = new SSEServerTransport('/mcp/sse', httpServer);
+
+// Connect MCP server to SSE transport
+mcpServer.connect(sseTransport);
+
+// Mount MCP router
+app.use('/mcp', mcpRouter);
+
+debugLog('MCP SERVER', 'MCP server connected with SSE transport');
+
+console.log('MCP Word server started (SSE transport)');
+
+// Socket.io connection handling for Office Add-in
+io.on('connection', (socket) => {
+  console.log(`Office Add-in client connected: ${socket.id}`);
+  connectedClients.add(socket);
+  debugLog('WEBSOCKET', `Client connected: ${socket.id}`);
+  
+  socket.on('disconnect', () => {
+    console.log(`Office Add-in client disconnected: ${socket.id}`);
+    connectedClients.delete(socket);
+    debugLog('WEBSOCKET', `Client disconnected: ${socket.id}`);
+  });
+  
+  // Handle client status updates
+  socket.on('status', (data) => {
+    console.log(`Client status: ${JSON.stringify(data)}`);
+    debugLog('WEBSOCKET STATUS', `Client ${socket.id} status`, data);
+  });
+  
+  // Return the edit results from the Office Add-in
+  socket.on('edit-complete', (data) => {
+    const { editId, success, message, error } = data;
+    console.log(`Edit completed: ${editId}, Success: ${success}`);
+    debugLog('WEBSOCKET EDIT', `Edit completed: ${editId}`, data);
+    
+    const pendingEdit = pendingEdits.get(editId);
+    if (pendingEdit) {
+      clearTimeout(pendingEdit.timeout);
+      pendingEdits.delete(editId);
+      
+      if (success) {
+        pendingEdit.resolve({ 
+          success: true, 
+          message: message || 'Edit applied successfully',
+          editId 
+        });
+      } else {
+        pendingEdit.reject(new Error(error || 'Edit failed in Office Add-in'));
+      }
+    }
+  });
+  
+  // Handle Office Add-in errors
+  socket.on('edit-error', (data) => {
+    const { editId, error } = data;
+    console.log(`Edit error: ${editId}, Error: ${error}`);
+    debugLog('WEBSOCKET ERROR', `Edit error: ${editId}`, data);
+    
+    const pendingEdit = pendingEdits.get(editId);
+    if (pendingEdit) {
+      clearTimeout(pendingEdit.timeout);
+      pendingEdits.delete(editId);
+      pendingEdit.reject(new Error(error));
+    }
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    connectedClients: io.engine.clientsCount,
+    pendingEdits: pendingEdits.size,
+    transport: 'SSE'
+  });
+});
+
+// Startup: node server.js (listens on port 3000 by default)
+httpServer.listen(PORT, () => {
+  console.log(`MCP Word Proxy Server running on http://localhost:${PORT}`);
+  console.log(`MCP endpoint (SSE): http://localhost:${PORT}/mcp/sse`);
+  console.log(`Office Add-in endpoint: http://localhost:${PORT}/office`);
+  console.log(`Static resources served from: ${path.join(__dirname, 'public')}`);
+  console.log('Ready to serve manifest.xml, taskpane.html, taskpane.js');
+  if (DEBUG_MODE) {
+    console.log('[DEBUG MODE] Use --debug flag to see detailed MCP communication logs');
+  }
+});
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\nShutting down gracefully...');
+  
+  // Clean up pending edits
+  for (const [editId, pendingEdit] of pendingEdits) {
+    clearTimeout(pendingEdit.timeout);
+    pendingEdit.reject(new Error('Server shutting down'));
+  }
+  pendingEdits.clear();
+  
+  httpServer.close();
+  await mcpServer.close();
+  process.exit(0);
+});
         enum: ["cursor", "start", "end"],
         description: "Where to perform the operation",
         default: "cursor"

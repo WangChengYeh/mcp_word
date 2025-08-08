@@ -20,7 +20,7 @@ flowchart LR
 ## 3. Components
 
 ### 3.1 MCP Server (`server.js`)
-- Stack: Node.js (ESM), Express (static hosting), Claude MCP TypeScript SDK (@modelcontextprotocol/sdk/server/mcp.js and @modelcontextprotocol/sdk/server/stdio.js)
+- Stack: Node.js (ESM), Express (static hosting), Claude MCP TypeScript SDK (@modelcontextprotocol/sdk/server/mcp.js and @modelcontextprotocol/sdk/server/sse.js)
 - Responsibilities:
   1. Serve static resources (`manifest.xml`, `taskpane.html`, `taskpane.js`) via Express
   2. Instance an McpServer and registerTool an `EditTask`:
@@ -28,8 +28,9 @@ flowchart LR
      - Forward to Office Add-in
      - Return the edit results from the Office Add-in
 - Startup: `node server.js` (listens on port 3000 by default)
-  1. URL /mcp for mcp server
-  2. URL /office for office add-in
+  1. express app
+  2. URL /mcp for mcp server: app MCP router using SSE (Server-Sent Events)
+  3. URL /office for office add-in: socket.io
 
 ### 3.2 Office Add-in (public/)
 #### `manifest.xml`
