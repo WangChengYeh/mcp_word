@@ -110,8 +110,8 @@ const mcp = new McpServer({
 
 // 工具：editTask -> 透過 ai-cmd 廣播給 Add-in
 mcp.registerTool(
+  "editTask",
   {
-    name: "editTask",
     description:
       "Send an edit task to the Office Add-in via WebSocket (event: ai-cmd).",
     inputSchema: {
@@ -174,8 +174,8 @@ mcp.registerTool(
 
 // 工具：ping -> 回傳 pong 或輸入訊息
 mcp.registerTool(
+  "ping",
   {
-    name: "ping",
     description: "Health check tool.",
     inputSchema: {
       type: "object",
