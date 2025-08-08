@@ -29,7 +29,7 @@ flowchart LR
      - Return the edit results from the Office Add-in
 - Startup: `node server.js` (listens on port 3000 by default)
   1. express app
-  2. URL /mcp for mcp server: app MCP router using SSE (Server-Sent Events)
+  2. URL /mcp using SSE (Server-Sent Events) and then connect to mcp server
   3. URL /office for office add-in: socket.io
 
 ### 3.2 Office Add-in (public/)

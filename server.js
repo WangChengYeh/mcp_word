@@ -144,20 +144,13 @@ mcpServer.registerTool({
   }
 }, handleEditTask);
 
-// MCP router using SSE (Server-Sent Events)
-const mcpRouter = express.Router();
-mcpRouter.use(express.json());
-
-// Create SSE transport for MCP
-const sseTransport = new SSEServerTransport('/mcp/sse', httpServer);
+// URL /mcp using SSE (Server-Sent Events) and then connect to mcp server
+const sseTransport = new SSEServerTransport('/mcp', httpServer);
 
 // Connect MCP server to SSE transport
 mcpServer.connect(sseTransport);
 
-// Mount MCP router
-app.use('/mcp', mcpRouter);
-
-debugLog('MCP SERVER', 'MCP server connected with SSE transport');
+debugLog('MCP SERVER', 'MCP server connected with SSE transport at /mcp');
 
 console.log('MCP Word server started (SSE transport)');
 
@@ -224,14 +217,19 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     connectedClients: io.engine.clientsCount,
     pendingEdits: pendingEdits.size,
-    transport: 'SSE'
+    transport: 'SSE',
+    endpoints: {
+      mcp: '/mcp',
+      office: '/office',
+      health: '/health'
+    }
   });
 });
 
 // Startup: node server.js (listens on port 3000 by default)
 httpServer.listen(PORT, () => {
   console.log(`MCP Word Proxy Server running on http://localhost:${PORT}`);
-  console.log(`MCP endpoint (SSE): http://localhost:${PORT}/mcp/sse`);
+  console.log(`MCP endpoint (SSE): http://localhost:${PORT}/mcp`);
   console.log(`Office Add-in endpoint: http://localhost:${PORT}/office`);
   console.log(`Static resources served from: ${path.join(__dirname, 'public')}`);
   console.log('Ready to serve manifest.xml, taskpane.html, taskpane.js');
@@ -253,6 +251,8 @@ process.on('SIGINT', async () => {
   
   httpServer.close();
   await mcpServer.close();
+  process.exit(0);
+});
   process.exit(0);
 });
         enum: ["cursor", "start", "end"],
