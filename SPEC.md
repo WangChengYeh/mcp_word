@@ -20,8 +20,8 @@ flowchart LR
 ## 3. Components
 
 ### 3.1 MCP Server (`server.js`)
-  1. McpServer (@modelcontextprotocol/sdk/server/mcp.js
-  2. StdioServerTransport from "@modelcontextprotocol/sdk/server/stdio.js"
+  1. import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+  2. import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
   3. server.registerTool to add Tool in MCP server
   4. office add-in: socket.io
 

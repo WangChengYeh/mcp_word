@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 
-const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
-const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const http = require('http');
-const express = require('express');
-const { Server } = require('socket.io');
-const path = require('path');
-const fs = require('fs');
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import http from 'http';
+import express from 'express';
+import { Server } from 'socket.io';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+// ES6 module path resolution
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuration
 const PORT = process.env.PORT || 3000;
@@ -63,10 +68,10 @@ class WordMCPServer {
     }
 
     setupMCPTools() {
-        // Register edit_document tool
+        // Register edit_document tool with enhanced EditTask support
         this.server.registerTool({
             name: 'edit_document',
-            description: 'Edit Word document content via Office Add-in',
+            description: 'Edit Word document content via Office Add-in with various EditTask types',
             parameters: {
                 type: 'object',
                 properties: {
@@ -76,15 +81,31 @@ class WordMCPServer {
                     },
                     action: {
                         type: 'string',
-                        enum: ['insert', 'replace', 'append'],
+                        enum: ['insert', 'replace', 'append', 'delete'],
                         default: 'insert',
                         description: 'Action to perform with the content'
                     },
                     position: {
                         type: 'string',
-                        enum: ['cursor', 'start', 'end'],
+                        enum: ['cursor', 'start', 'end', 'selection'],
                         default: 'cursor',
                         description: 'Position to perform the action'
+                    },
+                    taskType: {
+                        type: 'string',
+                        enum: ['text', 'table', 'image', 'formatting'],
+                        default: 'text',
+                        description: 'Type of EditTask to perform'
+                    },
+                    formatting: {
+                        type: 'object',
+                        properties: {
+                            bold: { type: 'boolean' },
+                            italic: { type: 'boolean' },
+                            fontSize: { type: 'number' },
+                            color: { type: 'string' }
+                        },
+                        description: 'Formatting options for text'
                     }
                 },
                 required: ['content']
@@ -93,28 +114,34 @@ class WordMCPServer {
             logger.info('Received edit_document request', params);
             
             try {
-                // Send command to all connected Office Add-in clients
+                // Enhanced command structure for different EditTask types
                 const command = {
                     action: params.action || 'insert',
                     content: params.content,
                     position: params.position || 'cursor',
-                    timestamp: new Date().toISOString()
+                    taskType: params.taskType || 'text',
+                    formatting: params.formatting || {},
+                    timestamp: new Date().toISOString(),
+                    id: Math.random().toString(36).substr(2, 9)
                 };
 
                 this.broadcastToClients('ai-cmd', command);
                 
-                logger.info('Document edit command sent to Office clients', command);
+                logger.info('Enhanced EditTask command sent to Office clients', command);
                 
                 return {
                     success: true,
-                    message: `Content ${command.action} command sent to ${this.socketClients.size} Office client(s)`,
-                    clientCount: this.socketClients.size
+                    message: `${command.taskType} ${command.action} command sent to ${this.socketClients.size} Office client(s)`,
+                    clientCount: this.socketClients.size,
+                    commandId: command.id,
+                    taskType: command.taskType
                 };
             } catch (error) {
                 logger.error('Error in edit_document tool', error);
                 return {
                     success: false,
-                    error: error.message
+                    error: error.message,
+                    timestamp: new Date().toISOString()
                 };
             }
         });
@@ -137,7 +164,62 @@ class WordMCPServer {
             };
         });
 
-        logger.info('MCP tools registered successfully');
+        // Register new table creation tool
+        this.server.registerTool({
+            name: 'create_table',
+            description: 'Create a table in the Word document',
+            parameters: {
+                type: 'object',
+                properties: {
+                    rows: {
+                        type: 'number',
+                        description: 'Number of rows in the table'
+                    },
+                    columns: {
+                        type: 'number', 
+                        description: 'Number of columns in the table'
+                    },
+                    headers: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Header row content'
+                    },
+                    data: {
+                        type: 'array',
+                        items: {
+                            type: 'array',
+                            items: { type: 'string' }
+                        },
+                        description: 'Table data as array of rows'
+                    }
+                },
+                required: ['rows', 'columns']
+            }
+        }, async (params) => {
+            logger.info('Received create_table request', params);
+            
+            const command = {
+                action: 'create_table',
+                taskType: 'table',
+                rows: params.rows,
+                columns: params.columns,
+                headers: params.headers || [],
+                data: params.data || [],
+                timestamp: new Date().toISOString(),
+                id: Math.random().toString(36).substr(2, 9)
+            };
+
+            this.broadcastToClients('ai-cmd', command);
+            
+            return {
+                success: true,
+                message: `Table creation command sent (${params.rows}x${params.columns})`,
+                clientCount: this.socketClients.size,
+                commandId: command.id
+            };
+        });
+
+        logger.info('Enhanced MCP tools registered successfully');
     }
 
     broadcastToClients(event, data) {
@@ -184,19 +266,46 @@ function createWebServer(mcpServer) {
         });
     });
 
-    // Socket.io connection handling
+    // Socket.io connection handling with enhanced error tracking
     io.on('connection', (socket) => {
         logger.info(`Office client connected: ${socket.id}`);
         mcpServer.socketClients.add(socket);
 
-        // Handle client identification
+        // Enhanced client identification with Office.js info
         socket.on('client-info', (data) => {
-            logger.info('Client info received', { socketId: socket.id, data });
+            logger.info('Office client info received', { 
+                socketId: socket.id, 
+                officeVersion: data.officeVersion,
+                platform: data.platform,
+                host: data.host
+            });
         });
 
-        // Handle document status updates from client
+        // Handle command execution results
+        socket.on('command-result', (data) => {
+            logger.info('Command execution result', { 
+                socketId: socket.id, 
+                commandId: data.commandId,
+                success: data.success,
+                error: data.error 
+            });
+        });
+
+        // Enhanced document status with Word-specific info
         socket.on('document-status', (data) => {
-            logger.debug('Document status update', { socketId: socket.id, data });
+            logger.debug('Document status update', { 
+                socketId: socket.id, 
+                documentName: data.documentName,
+                wordCount: data.wordCount,
+                selectionRange: data.selectionRange
+            });
+        });
+
+        // WebSocket authentication placeholder
+        socket.on('authenticate', (token) => {
+            // TODO: Implement authentication logic
+            logger.debug('Authentication attempt', { socketId: socket.id });
+            socket.emit('auth-result', { success: true, message: 'Authentication not yet implemented' });
         });
 
         // Handle client errors
@@ -222,45 +331,66 @@ function createWebServer(mcpServer) {
     return { app, server, io };
 }
 
-// Main execution
+// Enhanced main execution with better error handling
 async function main() {
     try {
-        logger.info('Starting MCP Word Server...', { debug: DEBUG, port: PORT });
+        logger.info('Starting MCP Word Server...', { 
+            debug: DEBUG, 
+            port: PORT,
+            nodeVersion: process.version,
+            platform: process.platform
+        });
 
         const mcpServer = new WordMCPServer();
 
         // Check if running in STDIO mode (typical for MCP)
         if (process.stdin.isTTY === false) {
-            // STDIO mode - start MCP server
-            logger.info('Running in STDIO mode for MCP client');
+            // STDIO mode - start MCP server for Claude CLI integration
+            logger.info('Running in STDIO mode for MCP client (Claude CLI)');
             await mcpServer.start();
         } else {
-            // Interactive mode - start web server
-            logger.info('Running in interactive mode with web server');
+            // Interactive mode - start web server for Office Add-in
+            logger.info('Running in interactive mode with web server for Office Add-in');
             
             const { server } = createWebServer(mcpServer);
             
             server.listen(PORT, () => {
                 logger.info(`Web server started on http://localhost:${PORT}`);
-                logger.info('Office Add-in can connect via Socket.io');
+                logger.info('Office Add-in manifest URL: http://localhost:${PORT}/manifest.xml');
+                logger.info('Task pane URL: http://localhost:${PORT}/taskpane.html');
                 
                 if (DEBUG) {
-                    logger.info(`Debug mode enabled. Logs written to ${DEBUG_LOG_FILE}`);
+                    logger.info(`Debug mode enabled. Detailed logs written to ${DEBUG_LOG_FILE}`);
                 }
             });
 
-            // Handle graceful shutdown
-            process.on('SIGINT', () => {
-                logger.info('Shutting down server...');
+            // Enhanced graceful shutdown
+            const gracefulShutdown = () => {
+                logger.info('Received shutdown signal, closing server gracefully...');
                 server.close(() => {
-                    logger.info('Server shut down gracefully');
+                    logger.info('HTTP server closed');
+                    if (DEBUG) {
+                        logger.info('Final debug log written');
+                    }
                     process.exit(0);
                 });
-            });
+                
+                // Force close after 10 seconds
+                setTimeout(() => {
+                    logger.error('Could not close connections in time, forcefully shutting down');
+                    process.exit(1);
+                }, 10000);
+            };
+
+            process.on('SIGINT', gracefulShutdown);
+            process.on('SIGTERM', gracefulShutdown);
         }
 
     } catch (error) {
-        logger.error('Failed to start server', error);
+        logger.error('Failed to start server', { 
+            error: error.message, 
+            stack: error.stack 
+        });
         process.exit(1);
     }
 }
@@ -280,4 +410,5 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { WordMCPServer, Logger };
+// Export for testing
+export { WordMCPServer, Logger };
