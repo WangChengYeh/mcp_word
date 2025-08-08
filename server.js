@@ -10,8 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const server = createServer(app);
-const io = new Server(server, {
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
@@ -111,21 +111,11 @@ mcpServer.connect(transport);
 
 console.log('MCP Word server started');
 
-// Start Express server
-server.listen(PORT, () => {
-  console.log(`Proxy server running on http://localhost:${PORT}`);
-  console.log(`Serving Office Add-in from public/ directory`);
-  console.log(`Manifest available at: http://localhost:${PORT}/manifest.xml`);
-});
+// Store pending edits for tracking
+const pendingEdits = new Map();
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\nShutting down server...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+// Enhanced socket.io connection handling
+io.on('connection', (socket) => {
   console.log(`Office Add-in client connected: ${socket.id}`);
   
   socket.on('disconnect', () => {
@@ -186,19 +176,6 @@ httpServer.listen(PORT, () => {
   console.log('Ready to serve manifest.xml, taskpane.html, taskpane.js');
 });
 
-// Initialize MCP server with stdio transport
-async function initializeMCPServer() {
-  try {
-    const transport = new StdioServerTransport();
-    await mcpServer.connect(transport);
-    console.log('MCP Server initialized and connected via stdio');
-    console.log('Ready to receive EditTask requests from CLI or AI agents');
-  } catch (error) {
-    console.error('Failed to initialize MCP Server:', error.message);
-    console.log('Server will continue running for Office Add-in hosting');
-  }
-}
-
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\nShutting down gracefully...');
@@ -214,6 +191,3 @@ process.on('SIGINT', async () => {
   await mcpServer.close();
   process.exit(0);
 });
-
-// Initialize MCP server
-initializeMCPServer().catch(console.error);
