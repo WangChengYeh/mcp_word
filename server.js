@@ -47,16 +47,110 @@ app.get('/office', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'taskpane.html'));
 });
 
-// MCP endpoint for HTTP transport
+// MCP endpoint for HTTP transport - forward to MCP server
 app.use('/mcp', express.json());
 app.post('/mcp', async (req, res) => {
   try {
     debugLog('HTTP MCP REQUEST', 'Received HTTP request', req.body);
-    // Handle MCP over HTTP if needed
-    res.json({ status: 'MCP endpoint ready', transport: 'stdio' });
+    
+    const { method, params, id } = req.body;
+    
+    if (method === 'tools/call' && params?.name === 'EditTask') {
+      // Handle EditTask tool call directly
+      try {
+        const result = await handleEditTask(params.arguments);
+        
+        const response = {
+          jsonrpc: "2.0",
+          id: id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result)
+              }
+            ]
+          }
+        };
+        
+        debugLog('HTTP MCP RESPONSE', 'Sending response', response);
+        res.json(response);
+      } catch (error) {
+        debugLog('HTTP MCP TOOL ERROR', error.message, error);
+        
+        const errorResponse = {
+          jsonrpc: "2.0",
+          id: id,
+          error: {
+            code: -1,
+            message: error.message
+          }
+        };
+        
+        res.status(500).json(errorResponse);
+      }
+    } else if (method === 'tools/list') {
+      // Handle tools list request
+      const response = {
+        jsonrpc: "2.0",
+        id: id,
+        result: {
+          tools: [
+            {
+              name: "EditTask",
+              description: "Edit Word document content through the Office Add-in",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  content: {
+                    type: "string",
+                    description: "The text content to insert or edit in the document"
+                  },
+                  operation: {
+                    type: "string",
+                    enum: ["insert", "replace", "append"],
+                    description: "The type of edit operation to perform",
+                    default: "insert"
+                  },
+                  position: {
+                    type: "string",
+                    enum: ["cursor", "start", "end"],
+                    description: "Where to perform the operation",
+                    default: "cursor"
+                  }
+                },
+                required: ["content"]
+              }
+            }
+          ]
+        }
+      };
+      
+      debugLog('HTTP MCP RESPONSE', 'Tools list', response);
+      res.json(response);
+    } else {
+      // Unknown method
+      const errorResponse = {
+        jsonrpc: "2.0",
+        id: id,
+        error: {
+          code: -32601,
+          message: `Method not found: ${method}`
+        }
+      };
+      
+      res.status(404).json(errorResponse);
+    }
   } catch (error) {
     debugLog('HTTP MCP ERROR', error.message, error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      jsonrpc: "2.0",
+      id: req.body?.id,
+      error: {
+        code: -32603,
+        message: error.message
+      }
+    });
   }
 });
 
@@ -79,7 +173,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// MCP Server setup
+// MCP Server setup (no stdio transport)
 const mcpServer = new McpServer({
   name: "mcp-word-server",
   version: "1.0.0"
@@ -100,33 +194,8 @@ if (DEBUG_MODE) {
   });
 }
 
-// Register EditTask tool
-mcpServer.registerTool({
-  name: "EditTask",
-  description: "Edit Word document content through the Office Add-in",
-  inputSchema: {
-    type: "object",
-    properties: {
-      content: {
-        type: "string",
-        description: "The text content to insert or edit in the document"
-      },
-      operation: {
-        type: "string",
-        enum: ["insert", "replace", "append"],
-        description: "The type of edit operation to perform",
-        default: "insert"
-      },
-      position: {
-        type: "string",
-        enum: ["cursor", "start", "end"],
-        description: "Where to perform the operation",
-        default: "cursor"
-      }
-    },
-    required: ["content"]
-  }
-}, async (args) => {
+// EditTask handler function (extracted from mcpServer.registerTool)
+async function handleEditTask(args) {
   debugLog('TOOL EXECUTION', 'EditTask called', args);
 
   const { content, operation = "insert", position = "cursor" } = args;
@@ -165,13 +234,41 @@ mcpServer.registerTool({
     // Broadcast to all connected clients
     io.emit('ai-cmd', editCommand);
   });
-});
+}
 
-// Start MCP server with stdio transport
-const transport = new StdioServerTransport();
-mcpServer.connect(transport);
+// Register EditTask tool for stdio transport (if needed)
+mcpServer.registerTool({
+  name: "EditTask",
+  description: "Edit Word document content through the Office Add-in",
+  inputSchema: {
+    type: "object",
+    properties: {
+      content: {
+        type: "string",
+        description: "The text content to insert or edit in the document"
+      },
+      operation: {
+        type: "string",
+        enum: ["insert", "replace", "append"],
+        description: "The type of edit operation to perform",
+        default: "insert"
+      },
+      position: {
+        type: "string",
+        enum: ["cursor", "start", "end"],
+        description: "Where to perform the operation",
+        default: "cursor"
+      }
+    },
+    required: ["content"]
+  }
+}, handleEditTask);
 
-console.log('MCP Word server started');
+// Don't start stdio transport - only HTTP endpoint will be used
+// const transport = new StdioServerTransport();
+// mcpServer.connect(transport);
+
+console.log('MCP Word server started (HTTP only)');
 
 // Store pending edits for tracking
 const pendingEdits = new Map();
