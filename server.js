@@ -5,10 +5,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { Server as SocketIOServer } from 'socket.io';
 import http from 'http';
 import fs from 'fs';
-import path from 'path';
 
 const DEBUG = process.argv.includes('--debug');
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // Debug logging function
 function debugLog(message, data = null) {
@@ -16,12 +15,41 @@ function debugLog(message, data = null) {
     const timestamp = new Date().toISOString();
     const logEntry = `[${timestamp}] ${message}${data ? '\n' + JSON.stringify(data, null, 2) : ''}\n`;
     fs.appendFileSync('debug.log', logEntry);
-    console.error(message, data);
+    console.error(`DEBUG: ${message}`, data || '');
   }
 }
 
 // Create HTTP server for Socket.io
-const httpServer = http.createServer();
+const httpServer = http.createServer((req, res) => {
+  if (req.url === '/taskpane.html') {
+    // Serve taskpane.html for Office Add-in
+    try {
+      const html = fs.readFileSync('./public/taskpane.html', 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+    } catch (error) {
+      debugLog('Error serving taskpane.html', { error: error.message });
+      res.writeHead(404);
+      res.end('File not found');
+    }
+  } else if (req.url === '/taskpane.js') {
+    // Serve taskpane.js
+    try {
+      const js = fs.readFileSync('./public/taskpane.js', 'utf8');
+      res.writeHead(200, { 'Content-Type': 'application/javascript' });
+      res.end(js);
+    } catch (error) {
+      debugLog('Error serving taskpane.js', { error: error.message });
+      res.writeHead(404);
+      res.end('File not found');
+    }
+  } else {
+    res.writeHead(404);
+    res.end('Not found');
+  }
+});
+
+// Setup Socket.io server
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: "*",
@@ -38,13 +66,17 @@ io.on('connection', (socket) => {
   });
   
   socket.on('error', (error) => {
-    debugLog('Socket error', { socketId: socket.id, error });
+    debugLog('Socket error', { socketId: socket.id, error: error.message });
+  });
+  
+  socket.on('ready', (data) => {
+    debugLog('Add-in ready', { socketId: socket.id, data });
   });
 });
 
-// Start HTTP server for Socket.io
+// Start HTTP server
 httpServer.listen(PORT, () => {
-  debugLog(`Socket.io server listening on port ${PORT}`);
+  debugLog(`Server listening on http://localhost:${PORT}`);
 });
 
 // Create MCP Server
@@ -64,53 +96,54 @@ const server = new McpServer(
 server.registerTool(
   {
     name: "edit_document",
-    description: "Edit Word document content through Office Add-in",
+    description: "Send edit commands to Word document via Office Add-in",
     inputSchema: {
       type: "object",
       properties: {
+        content: {
+          type: "string",
+          description: "Text content to insert or edit"
+        },
         action: {
           type: "string",
           enum: ["insert", "replace", "append"],
-          description: "Type of edit action to perform"
-        },
-        content: {
-          type: "string",
-          description: "Text content to insert or replace"
+          description: "Type of edit action",
+          default: "insert"
         },
         position: {
           type: "string",
           enum: ["cursor", "start", "end", "selection"],
-          description: "Where to perform the edit",
+          description: "Position for the edit",
           default: "cursor"
         }
       },
-      required: ["action", "content"]
+      required: ["content"]
     },
   },
   async (request) => {
     try {
       debugLog('Received edit_document request', request);
       
-      const { action, content, position = "cursor" } = request.params.arguments;
+      const { content, action = "insert", position = "cursor" } = request.params.arguments;
       
-      // Create edit task
+      // Create EditTask
       const editTask = {
-        action,
         content,
+        action,
         position,
         timestamp: new Date().toISOString()
       };
       
-      // Send to all connected Office Add-ins
+      // Send to all connected Office Add-ins via Socket.io
       io.emit('ai-cmd', editTask);
       
-      debugLog('Sent edit task to Office Add-ins', editTask);
+      debugLog('Sent EditTask to Office Add-ins', editTask);
       
       return {
         content: [
           {
             type: "text",
-            text: `Edit task sent successfully: ${action} at ${position}`
+            text: `Edit command sent: ${action} "${content}" at ${position}`
           }
         ]
       };
@@ -131,34 +164,34 @@ server.registerTool(
   }
 );
 
-// Register additional tools for document operations
+// Register additional tool for document info
 server.registerTool(
   {
-    name: "get_document_info",
-    description: "Get information about the current document",
+    name: "get_document_status",
+    description: "Get current document status from Office Add-in",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: {}
     },
   },
   async (request) => {
     try {
-      debugLog('Received get_document_info request');
+      debugLog('Received get_document_status request');
       
-      // Request document info from Office Add-ins
-      io.emit('get-info', { timestamp: new Date().toISOString() });
+      // Request status from Office Add-ins
+      io.emit('get-status', { timestamp: new Date().toISOString() });
       
       return {
         content: [
           {
             type: "text",
-            text: "Document info request sent to Office Add-in"
+            text: "Document status request sent to Office Add-in"
           }
         ]
       };
       
     } catch (error) {
-      debugLog('Error in get_document_info tool', { error: error.message });
+      debugLog('Error in get_document_status tool', { error: error.message });
       
       return {
         content: [
@@ -173,7 +206,7 @@ server.registerTool(
   }
 );
 
-// Error handling
+// Global error handling
 process.on('uncaughtException', (error) => {
   debugLog('Uncaught exception', { error: error.message, stack: error.stack });
   process.exit(1);
@@ -188,10 +221,13 @@ async function main() {
   try {
     debugLog('Starting MCP Word Server');
     
+    // Create STDIO transport for MCP communication
     const transport = new StdioServerTransport();
+    
+    // Connect MCP server
     await server.connect(transport);
     
-    debugLog('MCP server connected and ready');
+    debugLog('MCP server connected and ready for STDIO communication');
     
   } catch (error) {
     debugLog('Failed to start MCP server', { error: error.message, stack: error.stack });
@@ -199,44 +235,8 @@ async function main() {
   }
 }
 
+// Start the server
 main();
-
-// Export for testing
-export { McpServer };
-                headers: params.headers || [],
-                data: params.data || [],
-                timestamp: new Date().toISOString(),
-                id: Math.random().toString(36).substr(2, 9)
-            };
-
-            this.broadcastToClients('ai-cmd', command);
-            
-            return {
-                success: true,
-                message: `Table creation command sent (${params.rows}x${params.columns})`,
-                clientCount: this.socketClients.size,
-                commandId: command.id
-            };
-        });
-
-        logger.info('Enhanced MCP tools registered successfully');
-    }
-
-    broadcastToClients(event, data) {
-        if (this.io) {
-            this.io.emit(event, data);
-            logger.debug(`Broadcasted ${event} to ${this.socketClients.size} clients`, data);
-        }
-    }
-
-    setSocketIO(io) {
-        this.io = io;
-    }
-
-    async start() {
-        const transport = new StdioServerTransport();
-        await this.server.connect(transport);
-        logger.info('MCP server started on STDIO transport');
     }
 }
 
