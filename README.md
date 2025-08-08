@@ -41,44 +41,42 @@ cd mcp_word
 npm install
 ```
 
-3. Configure Claude MCP client:
-
-Add the MCP server to Claude using the transport configuration:
-
-```bash
-# Add the Word Editor MCP server
-claude mcp add word-editor \
-  --transport stdio \
-  --command "node" \
-  --args "server.js" \
-  --cwd "/workspaces/mcp_word"
-
-# Verify the server was added
-claude mcp list
-```
-
-For custom environment variables:
-
-```bash
-claude mcp add word-editor \
-  --transport stdio \
-  --command "node" \
-  --args "server.js" \
-  --cwd "/workspaces/mcp_word" \
-  --env "PORT=3000,NODE_ENV=production"
-```
-
-## Usage
-
-### 1. Start the MCP Server
-
+3. Start the MCP Server:
 ```bash
 npm start
 ```
 
 The server will start on `http://localhost:3000` by default.
 
-### 2. Sideload the Word Add-in
+4. Configure Claude MCP client:
+
+Add the MCP server to Claude using HTTP transport:
+
+```bash
+# Add the Word Editor MCP server
+claude mcp add word-editor \
+  --transport http \
+  --url "http://localhost:3000/mcp"
+
+# Verify the server was added
+claude mcp list
+```
+
+For custom port configuration:
+
+```bash
+# If running server on different port
+PORT=4000 npm start
+
+# Then configure Claude with custom URL
+claude mcp add word-editor \
+  --transport http \
+  --url "http://localhost:4000/mcp"
+```
+
+## Usage
+
+### 1. Sideload the Word Add-in
 
 #### For Word Desktop:
 1. Open Word
@@ -91,7 +89,7 @@ The server will start on `http://localhost:3000` by default.
 2. Go to Insert > Office Add-ins > Upload My Add-in
 3. Select the `public/manifest.xml` file
 
-### 3. Connect MCP Client
+### 2. Connect MCP Client
 
 #### Using Claude MCP commands:
 
@@ -130,7 +128,7 @@ claude mcp call word-editor EditTask \
 claude mcp remove word-editor
 ```
 
-### 4. Document Editing
+### 3. Document Editing
 
 The Add-in will automatically:
 - Receive edit commands via WebSocket
@@ -195,4 +193,6 @@ The server accepts the following environment variables:
 
 **Add-in not loading:**
 - Verify the server is running on port 3000
-- Check that `manifest.xml` points to the correct URL- Ensure Word has internet connectivity**WebSocket connection failed:**- Confirm the server is accessible at `http://localhost:3000`- Check firewall settings- Verify WebSocket support in your environment**MCP client connection issues:**- Ensure the server.js process is running- Check that the MCP client supports the required protocol version- Verify command syntax and parameters### LogsServer logs will show:- MCP protocol messages- WebSocket connections- Edit command processing- Error details## Extensibility### Adding New Edit TypesExtend the `EditTask` tool to support:- Table manipulation- Image insertion- Advanced formatting- Document structure changes### Enhanced Features- Authentication and authorization- Multi-user collaboration- Edit history and versioning- Custom AI model integration## License[Your License Here]## Contributing1. Fork the repository2. Create a feature branch3. Make your changes4. Test with Word Add-in5. Submit a pull request## SupportFor issues and questions:- Check the troubleshooting section- Review server logs- Test with minimal reproduction cases- Report bugs with detailed environment information
+- Check that `manifest.xml` points to the correct URL
+- Ensure Word has internet connectivity
+**WebSocket connection failed:**- Confirm the server is accessible at `http://localhost:3000`- Check firewall settings- Verify WebSocket support in your environment**MCP client connection issues:**- Ensure the server is running (`npm start`)- Check that the MCP client supports HTTP transport- Verify the server URL is accessible at `http://localhost:3000/mcp`- Verify command syntax and parameters### LogsServer logs will show:- MCP protocol messages- WebSocket connections- Edit command processing- Error details## Extensibility### Adding New Edit TypesExtend the `EditTask` tool to support:- Table manipulation- Image insertion- Advanced formatting- Document structure changes### Enhanced Features- Authentication and authorization- Multi-user collaboration- Edit history and versioning- Custom AI model integration## License[Your License Here]## Contributing1. Fork the repository2. Create a feature branch3. Make your changes4. Test with Word Add-in5. Submit a pull request## SupportFor issues and questions:- Check the troubleshooting section- Review server logs- Test with minimal reproduction cases- Report bugs with detailed environment information
