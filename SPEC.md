@@ -28,6 +28,8 @@ flowchart LR
      - Forward to Office Add-in
      - Return the edit results from the Office Add-in
 - Startup: `node server.js` (listens on port 3000 by default)
+  1. URL /mcp for mcp server
+  2. URL /office for office add-in
 
 ### 3.2 Office Add-in (public/)
 #### `manifest.xml`

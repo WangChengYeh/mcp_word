@@ -42,10 +42,22 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve manifest.xml with correct MIME type
-app.get('/manifest.xml', (req, res) => {
-  res.type('application/xml');
-  res.sendFile(path.join(__dirname, 'public', 'manifest.xml'));
+// Office Add-in endpoint - serve taskpane.html
+app.get('/office', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'taskpane.html'));
+});
+
+// MCP endpoint for HTTP transport
+app.use('/mcp', express.json());
+app.post('/mcp', async (req, res) => {
+  try {
+    debugLog('HTTP MCP REQUEST', 'Received HTTP request', req.body);
+    // Handle MCP over HTTP if needed
+    res.json({ status: 'MCP endpoint ready', transport: 'stdio' });
+  } catch (error) {
+    debugLog('HTTP MCP ERROR', error.message, error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Store connected Office Add-in clients
@@ -125,8 +137,12 @@ mcpServer.registerTool({
     throw error;
   }
 
-  // Send edit command to all connected clients
+  // Generate unique edit ID for tracking
+  const editId = `edit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  // Create edit command with ID
   const editCommand = {
+    editId,
     content,
     operation,
     position,
@@ -135,17 +151,20 @@ mcpServer.registerTool({
 
   debugLog('WEBSOCKET EMIT', 'Sending ai-cmd to clients', editCommand);
 
-  // Broadcast to all connected clients
-  io.emit('ai-cmd', editCommand);
+  // Create promise for tracking edit completion
+  return new Promise((resolve, reject) => {
+    // Set timeout for edit operation
+    const timeout = setTimeout(() => {
+      pendingEdits.delete(editId);
+      reject(new Error('Edit operation timed out'));
+    }, 30000); // 30 second timeout
 
-  const result = {
-    success: true,
-    message: `Edit command sent to ${connectedClients.size} client(s)`,
-    command: editCommand
-  };
+    // Store pending edit
+    pendingEdits.set(editId, { resolve, reject, timeout });
 
-  debugLog('TOOL RESULT', 'EditTask completed', result);
-  return result;
+    // Broadcast to all connected clients
+    io.emit('ai-cmd', editCommand);
+  });
 });
 
 // Start MCP server with stdio transport
@@ -160,10 +179,12 @@ const pendingEdits = new Map();
 // Enhanced socket.io connection handling
 io.on('connection', (socket) => {
   console.log(`Office Add-in client connected: ${socket.id}`);
+  connectedClients.add(socket);
   debugLog('WEBSOCKET', `Client connected: ${socket.id}`);
   
   socket.on('disconnect', () => {
     console.log(`Office Add-in client disconnected: ${socket.id}`);
+    connectedClients.delete(socket);
     debugLog('WEBSOCKET', `Client disconnected: ${socket.id}`);
   });
   
@@ -185,7 +206,11 @@ io.on('connection', (socket) => {
       pendingEdits.delete(editId);
       
       if (success) {
-        pendingEdit.resolve({ message: message || 'Edit applied successfully' });
+        pendingEdit.resolve({ 
+          success: true, 
+          message: message || 'Edit applied successfully',
+          editId 
+        });
       } else {
         pendingEdit.reject(new Error(error || 'Edit failed in Office Add-in'));
       }
