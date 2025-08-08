@@ -2,207 +2,207 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { Server as SocketIOServer } from 'socket.io';
 import http from 'http';
-import express from 'express';
-import { Server } from 'socket.io';
-import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
+import path from 'path';
 
-// ES6 module path resolution
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Configuration
-const PORT = process.env.PORT || 3000;
 const DEBUG = process.argv.includes('--debug');
-const DEBUG_LOG_FILE = 'debug.log';
+const PORT = process.env.PORT || 3000;
 
-// Logging utility
-class Logger {
-    constructor(debug = false) {
-        this.debug = debug;
-        if (debug) {
-            // Clear debug log on start
-            fs.writeFileSync(DEBUG_LOG_FILE, '');
-        }
-    }
-
-    log(level, message, data = null) {
-        const timestamp = new Date().toISOString();
-        const logMessage = `[${timestamp}] [${level}] ${message}`;
-        
-        console.log(logMessage);
-        
-        if (this.debug) {
-            let debugMessage = logMessage;
-            if (data) {
-                debugMessage += `\nData: ${JSON.stringify(data, null, 2)}`;
-            }
-            fs.appendFileSync(DEBUG_LOG_FILE, debugMessage + '\n');
-        }
-    }
-
-    info(message, data) { this.log('INFO', message, data); }
-    warn(message, data) { this.log('WARN', message, data); }
-    error(message, data) { this.log('ERROR', message, data); }
-    debug(message, data) { 
-        if (this.debug) this.log('DEBUG', message, data); 
-    }
+// Debug logging function
+function debugLog(message, data = null) {
+  if (DEBUG) {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${message}${data ? '\n' + JSON.stringify(data, null, 2) : ''}\n`;
+    fs.appendFileSync('debug.log', logEntry);
+    console.error(message, data);
+  }
 }
 
-const logger = new Logger(DEBUG);
+// Create HTTP server for Socket.io
+const httpServer = http.createServer();
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
-// MCP Server Setup
-class WordMCPServer {
-    constructor() {
-        this.server = new McpServer({
-            name: 'mcp-word-server',
-            version: '1.0.0',
-            description: 'MCP server for Word document editing via Office Add-in'
-        });
-        
-        this.socketClients = new Set();
-        this.setupMCPTools();
-        logger.info('MCP Word Server initialized');
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  debugLog('Office Add-in connected', { socketId: socket.id });
+  
+  socket.on('disconnect', () => {
+    debugLog('Office Add-in disconnected', { socketId: socket.id });
+  });
+  
+  socket.on('error', (error) => {
+    debugLog('Socket error', { socketId: socket.id, error });
+  });
+});
+
+// Start HTTP server for Socket.io
+httpServer.listen(PORT, () => {
+  debugLog(`Socket.io server listening on port ${PORT}`);
+});
+
+// Create MCP Server
+const server = new McpServer(
+  {
+    name: "mcp-word-server",
+    version: "1.0.0",
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
+
+// Register EditTask tool
+server.registerTool(
+  {
+    name: "edit_document",
+    description: "Edit Word document content through Office Add-in",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["insert", "replace", "append"],
+          description: "Type of edit action to perform"
+        },
+        content: {
+          type: "string",
+          description: "Text content to insert or replace"
+        },
+        position: {
+          type: "string",
+          enum: ["cursor", "start", "end", "selection"],
+          description: "Where to perform the edit",
+          default: "cursor"
+        }
+      },
+      required: ["action", "content"]
+    },
+  },
+  async (request) => {
+    try {
+      debugLog('Received edit_document request', request);
+      
+      const { action, content, position = "cursor" } = request.params.arguments;
+      
+      // Create edit task
+      const editTask = {
+        action,
+        content,
+        position,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Send to all connected Office Add-ins
+      io.emit('ai-cmd', editTask);
+      
+      debugLog('Sent edit task to Office Add-ins', editTask);
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Edit task sent successfully: ${action} at ${position}`
+          }
+        ]
+      };
+      
+    } catch (error) {
+      debugLog('Error in edit_document tool', { error: error.message, stack: error.stack });
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error.message}`
+          }
+        ],
+        isError: true
+      };
     }
+  }
+);
 
-    setupMCPTools() {
-        // Register edit_document tool with enhanced EditTask support
-        this.server.registerTool({
-            name: 'edit_document',
-            description: 'Edit Word document content via Office Add-in with various EditTask types',
-            parameters: {
-                type: 'object',
-                properties: {
-                    content: {
-                        type: 'string',
-                        description: 'Text content to insert or edit in the document'
-                    },
-                    action: {
-                        type: 'string',
-                        enum: ['insert', 'replace', 'append', 'delete'],
-                        default: 'insert',
-                        description: 'Action to perform with the content'
-                    },
-                    position: {
-                        type: 'string',
-                        enum: ['cursor', 'start', 'end', 'selection'],
-                        default: 'cursor',
-                        description: 'Position to perform the action'
-                    },
-                    taskType: {
-                        type: 'string',
-                        enum: ['text', 'table', 'image', 'formatting'],
-                        default: 'text',
-                        description: 'Type of EditTask to perform'
-                    },
-                    formatting: {
-                        type: 'object',
-                        properties: {
-                            bold: { type: 'boolean' },
-                            italic: { type: 'boolean' },
-                            fontSize: { type: 'number' },
-                            color: { type: 'string' }
-                        },
-                        description: 'Formatting options for text'
-                    }
-                },
-                required: ['content']
-            }
-        }, async (params) => {
-            logger.info('Received edit_document request', params);
-            
-            try {
-                // Enhanced command structure for different EditTask types
-                const command = {
-                    action: params.action || 'insert',
-                    content: params.content,
-                    position: params.position || 'cursor',
-                    taskType: params.taskType || 'text',
-                    formatting: params.formatting || {},
-                    timestamp: new Date().toISOString(),
-                    id: Math.random().toString(36).substr(2, 9)
-                };
+// Register additional tools for document operations
+server.registerTool(
+  {
+    name: "get_document_info",
+    description: "Get information about the current document",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  async (request) => {
+    try {
+      debugLog('Received get_document_info request');
+      
+      // Request document info from Office Add-ins
+      io.emit('get-info', { timestamp: new Date().toISOString() });
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Document info request sent to Office Add-in"
+          }
+        ]
+      };
+      
+    } catch (error) {
+      debugLog('Error in get_document_info tool', { error: error.message });
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error.message}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+);
 
-                this.broadcastToClients('ai-cmd', command);
-                
-                logger.info('Enhanced EditTask command sent to Office clients', command);
-                
-                return {
-                    success: true,
-                    message: `${command.taskType} ${command.action} command sent to ${this.socketClients.size} Office client(s)`,
-                    clientCount: this.socketClients.size,
-                    commandId: command.id,
-                    taskType: command.taskType
-                };
-            } catch (error) {
-                logger.error('Error in edit_document tool', error);
-                return {
-                    success: false,
-                    error: error.message,
-                    timestamp: new Date().toISOString()
-                };
-            }
-        });
+// Error handling
+process.on('uncaughtException', (error) => {
+  debugLog('Uncaught exception', { error: error.message, stack: error.stack });
+  process.exit(1);
+});
 
-        // Register get_document_status tool
-        this.server.registerTool({
-            name: 'get_document_status',
-            description: 'Get status of connected Office Add-in clients',
-            parameters: {
-                type: 'object',
-                properties: {}
-            }
-        }, async () => {
-            logger.debug('Getting document status');
-            
-            return {
-                connectedClients: this.socketClients.size,
-                serverStatus: 'running',
-                timestamp: new Date().toISOString()
-            };
-        });
+process.on('unhandledRejection', (reason, promise) => {
+  debugLog('Unhandled rejection', { reason, promise });
+});
 
-        // Register new table creation tool
-        this.server.registerTool({
-            name: 'create_table',
-            description: 'Create a table in the Word document',
-            parameters: {
-                type: 'object',
-                properties: {
-                    rows: {
-                        type: 'number',
-                        description: 'Number of rows in the table'
-                    },
-                    columns: {
-                        type: 'number', 
-                        description: 'Number of columns in the table'
-                    },
-                    headers: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        description: 'Header row content'
-                    },
-                    data: {
-                        type: 'array',
-                        items: {
-                            type: 'array',
-                            items: { type: 'string' }
-                        },
-                        description: 'Table data as array of rows'
-                    }
-                },
-                required: ['rows', 'columns']
-            }
-        }, async (params) => {
-            logger.info('Received create_table request', params);
-            
-            const command = {
-                action: 'create_table',
-                taskType: 'table',
-                rows: params.rows,
-                columns: params.columns,
+// Initialize MCP server with STDIO transport
+async function main() {
+  try {
+    debugLog('Starting MCP Word Server');
+    
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    
+    debugLog('MCP server connected and ready');
+    
+  } catch (error) {
+    debugLog('Failed to start MCP server', { error: error.message, stack: error.stack });
+    process.exit(1);
+  }
+}
+
+main();
+
+// Export for testing
+export { McpServer };
                 headers: params.headers || [],
                 data: params.data || [],
                 timestamp: new Date().toISOString(),
@@ -406,9 +406,7 @@ process.on('uncaughtException', (error) => {
 });
 
 // Start the server
-if (require.main === module) {
-    main();
-}
+main();
 
 // Export for testing
 export { WordMCPServer, Logger };

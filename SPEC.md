@@ -6,7 +6,7 @@
 # Author: Your Name
 
 ## 1. Introduction
-MCP_WORD build a MCP server (`server.js`) alongside an Office.js Word Add-in client to enable AI-driven document editing workflows.
+MCP_WORD build a MCP server (`node server.js`) alongside an Office.js Word Add-in client to enable AI-driven document editing workflows.
 
 ## 2. Architecture Overview
 ```mermaid
