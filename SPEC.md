@@ -20,8 +20,11 @@ flowchart LR
 ### 3.1 MCP Server (`server.js`)
   1. import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
   2. import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-  3. server.registerTool to add Tool in MCP server
-  4. office add-in: socket.io
+  3. server.registerTool to add Tool in MCP server (in file tool.js)
+  4. forward the payload (MCP tool json string) to socket.io (in file tool.js)
+  5. tool handling only in tool.js, server.js only forward json string or json object
+  6. io.emit(tool name, tool params) to office add-in
+  6. office add-in: socket.io
 
 ### 3.2 Office Add-in (public/)
 #### `manifest.xml`
@@ -36,12 +39,12 @@ flowchart LR
 #### `taskpane.js`
 - Uses `Office.onReady()` to detect the Word host
 - Establishes a WebSocket connection with `io()`
-- Listens for `ai-cmd` events and inserts/edits text via `Word.run()`
+- Listens for 'MCP tool' events and call Word functions via `Word.run()`
 - Implements basic error handling
 
 ## 4. Workflow
 1. install the MCP server: `npm install`
-2. STDIO from Codex CLI or fake master, use unix pipeline to provide input
+2. stdio from Codex CLI or fake master, use unix pipeline to provide input
 3. Sideload the Add-in manifest in Word
 4. Send `EditTask` requests via Codex CLI or another service, e.g. `{ content: '...' }`
 5. The Add-in client receives edits in real time and applies them to the document
@@ -52,21 +55,16 @@ flowchart LR
 
 ## 6. Debugging
 - add argument --debug, dump detail and error in debug.log 
+- Record stdio stream into debug.log
+- Add a pipe after stdin and a pipe before stdout to record and forward if debug
+- Record json string before send socket and after receive socket in debug.log
+
 ## 7. Test
-- test.sh Unit test, Fake STDIO for MCP client and socket connection for office
-- STDIO: use shell pipeline to provide input
+- test.sh Unit test, Fake stdio for MCP client and socket connection for office
+- stdio: use shell pipeline to provide input
 - socket: generate a test javascript as a socket client
 - before test, prepare package.json
-- Default test port: 3100 (3000 reserved for normal use)
-- NEW: You can pipe custom MCP JSONL into test.sh, one JSON object per line (script auto-sends initialize + notifications/initialized)
-  Example:
-  echo '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"PipeMsg","action":"insert","target":"selection"}}}' | ./test.sh
-  Multiple lines:
-  cat <<'EOF' | ./test.sh
-  {"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"ping","arguments":{"message":"hello"}}}
-  {"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"FromSTDIN","action":"insert","target":"selection"}}}
-  EOF
-  The script extracts expected content from the first editTask; if none provided, the first ai-cmd event counts as success.
+- default test port: 3100 (3000 reserved for normal use)
 ## 8. Integration Test
 - test.js Integration test: MCP client + MCP server (server.js)
 - MCP client: import { Client } from "@modelcontextprotocol/sdk/client/index.js"
