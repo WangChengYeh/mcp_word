@@ -57,6 +57,7 @@ flowchart LR
 - STDIO: use shell pipeline to provide input
 - socket: generate a test javascript as a socket client
 - before test, prepare package.json
+- Default test port: 3100 (3000 reserved for normal use)
 - NEW: You can pipe custom MCP JSONL into test.sh, one JSON object per line (script auto-sends initialize + notifications/initialized)
   Example:
   echo '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"PipeMsg","action":"insert","target":"selection"}}}' | ./test.sh
@@ -67,9 +68,9 @@ flowchart LR
   EOF
   The script extracts expected content from the first editTask; if none provided, the first ai-cmd event counts as success.
 ## 8. Integration Test
-- test.js Integration test: MCP client + MCP server (server.js) + office (public/taskpane.js)
-- MCP client: import { Client } from "@modelcontextprotocol/sdk/server/mcp.js"
-- MCP client: list tools and call a tool
+- test.js Integration test: MCP client + MCP server (server.js)
+- MCP client: import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+- MCP client: list tools and call tools (e.g., ping, editTask)
 ## 9 . Doc
 ### README.md for use step-by-step stall and run
 - Codex MCP setting, [mcp_servers.mcp_word] in .codex/config.toml
