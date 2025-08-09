@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 // Accept self-signed certs for local HTTPS in tests
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 3100);
 const KEY = process.env.KEY_PATH || path.resolve(__dirname, 'key.pem');
 const CERT = process.env.CERT_PATH || path.resolve(__dirname, 'cert.pem');
 
@@ -137,4 +137,3 @@ async function main() {
 }
 
 main();
-

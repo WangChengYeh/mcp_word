@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${PORT:-3000}"
+PORT="${PORT:-3100}"
 
 # Read STDIN (non-interactive) as JSONL input
 STDIN_BUFFER=""
