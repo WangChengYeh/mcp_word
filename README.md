@@ -65,6 +65,27 @@ Trust the cert in your OS keychain so Word and your browser accept it.
 
 Point your MCP client to run `server.js` via Node.
 
+Codex CLI (.codex/config.toml):
+```toml
+# Place in ./.codex/config.toml (project) or ~/.codex/config.toml (user)
+[mcp_servers.mcp_word]
+command = "node"
+args = [
+  "/absolute/path/to/server.js",
+  "--key", "/abs/path/to/key.pem",
+  "--cert", "/abs/path/to/cert.pem",
+  "--port", "3000"
+]
+cwd = "/absolute/path/to/project"
+# Optional: env vars
+env = { NODE_ENV = "production" }
+```
+
+Notes:
+- Use absolute paths for reliability.
+- If using a PFX/P12 bundle: replace `--key/--cert` with `--pfx /abs/cert.pfx --passphrase "your-passphrase"`.
+- Restart the Codex Client after saving the config; tools `ping` and `editTask` should appear.
+
 Claude Desktop (settings excerpt):
 ```json
 {
@@ -173,4 +194,3 @@ mcp_word/
 ## License
 
 See LICENSE.
-

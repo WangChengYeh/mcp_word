@@ -71,11 +71,52 @@ flowchart LR
 - test.js Integration test: MCP client + MCP server (server.js)
 - MCP client: import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 - MCP client: list tools and call tools (e.g., ping, editTask)
-## 9 . Doc
-### README.md for use step-by-step stall and run
-- Codex MCP setting, [mcp_servers.mcp_word] in .codex/config.toml
-- Word add-in: find 'Script Lab'
-- Script: copy from task-pane.js, 
-- Libraries https://cdn.socket.io/4.7.5/socket.io.min.js
+## 9. Documentation
 
-### Code / doc all english only
+### 9.1 README.md requirements (step-by-step)
+The project README must include the following, in order:
+- Prerequisites: Node.js version, Microsoft Word, and trusted HTTPS cert note.
+- Install: `npm install`.
+- Run server: HTTPS launch examples (PEM and PFX), plus `--debug`.
+- Create a local dev certificate: OpenSSL commands to generate PEM and PFX.
+- Configure MCP client: Codex Client setup via `.codex/config.toml` (see 9.2).
+- Office add-in: two options:
+  - Sideload `public/manifest.xml` in Word (points to `https://localhost:3000/taskpane.html`).
+  - Script Lab alternative: paste `public/taskpane.js` and add Socket.IO CDN `https://cdn.socket.io/4.7.5/socket.io.min.js`.
+- Tools: document `editTask` (args and example frame) and `ping`.
+- Debugging: `--debug` behavior and `GET /healthz`.
+- Testing: how to run `./test.sh` and pipe custom MCP JSONL.
+- Project structure and License.
+
+### 9.2 Codex Client (Codex CLI) setup
+Document how to point Codex to the MCP server using a TOML config. Provide both project-local and user-level options.
+
+1) Config file location
+- Preferred (project-local): `./.codex/config.toml`
+- User-level (global): `~/.codex/config.toml`
+
+2) Minimal configuration snippet
+```toml
+# ./.codex/config.toml or ~/.codex/config.toml
+[mcp_servers.mcp_word]
+command = "node"
+args = [
+  "/absolute/path/to/server.js",
+  "--key", "/abs/path/to/key.pem",
+  "--cert", "/abs/path/to/cert.pem",
+  "--port", "3000"
+]
+cwd = "/absolute/path/to/project"
+# Optional environment variables
+env = { NODE_ENV = "production" }
+```
+
+Notes:
+- Use absolute paths for reliability across shells.
+- If using a PFX/P12 bundle instead of PEM:
+  - Replace `--key/--cert` with `--pfx /abs/cert.pfx --passphrase "your-passphrase"` in `args`.
+- Ensure the TLS certificate is trusted by your OS so Word and the browser accept `https://localhost:3000`.
+- After saving the config, restart the Codex Client so it picks up changes. You should see tools `ping` and `editTask` available.
+
+### 9.3 Language
+- Code and documentation: English only.
