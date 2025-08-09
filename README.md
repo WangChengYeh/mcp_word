@@ -13,8 +13,9 @@ flowchart LR
 
 ## Components
 
-- MCP server (`server.js`): Uses `@modelcontextprotocol/sdk` with `StdioServerTransport`, registers tools (`editTask`, `ping`), and bridges edits to Socket.IO clients.
-- Office Add-in (public/): `manifest.xml`, `taskpane.html`, `taskpane.js` for receiving AI edit commands and applying them in Word via Office.js.
+- MCP server (`server.js`): Uses `@modelcontextprotocol/sdk` with `StdioServerTransport`, bridges edits to Socket.IO clients, forwards JSON on tool-named events, serves `/taskpane.yaml` for Script Lab import.
+- Tools (`tool.js`): Registers MCP tools (`editTask`, `ping`) and forwards tool arguments to Socket.IO on the tool event (e.g., `editTask`).
+- Office Add-in (public/): `manifest.xml`, `taskpane.html`, `taskpane.js` for receiving AI edit commands and applying them in Word via Office.js; `taskpane.yaml` for Script Lab import.
 
 ## Prerequisites
 
@@ -45,7 +46,10 @@ node server.js --key key.pem --cert cert.pem --port 3000 --debug
 
 Tips:
 - Use self-signed certs for dev and mark them trusted so Office/Browser accept `https://localhost:3000`.
-- Static files are served from `public/`. Health check: `GET https://localhost:3000/healthz`.
+- Static files are served from `public/`.
+- Endpoints:
+  - Health: `GET https://localhost:3000/healthz`
+  - Script Lab snippet: `GET https://localhost:3000/taskpane.yaml`
 
 ### Create a Local Dev Certificate
 
@@ -114,10 +118,8 @@ Two ways to connect Word to the server:
 - Ensure the same host/port and a trusted certificate
 
 2) Script Lab (alternative)
-- Install Microsoft Script Lab add-in
-- Create a new script and paste the contents of `public/taskpane.js`
-- Add library: `https://cdn.socket.io/4.7.5/socket.io.min.js`
-- Update any hardcoded origin/port if needed
+- Option A (paste JS): Install Script Lab, create a new script and paste `public/taskpane.js`, and add library `https://cdn.socket.io/4.7.5/socket.io.min.js`.
+- Option B (import YAML): In Script Lab, import from `https://localhost:3000/taskpane.yaml` (served by the server). Adjust the server URL/port in the snippet if needed.
 
 ## Tools
 
@@ -154,6 +156,11 @@ JSON-RPC example (MCP stdio frame):
 
 - `--debug`: writes detailed logs to `debug.log` and mirrors activity to stderr without polluting MCP stdout.
 - Health endpoint: `GET https://localhost:3000/healthz` shows connected clients.
+- Stream logging in `debug.log`:
+  - `[DEBUG stdin]` raw MCP stdio frames received.
+  - `[DEBUG stdout]` raw MCP responses written.
+  - `[socket:send] <toolName> <json>` forwarded tool calls to Socket.IO.
+  - `[socket:recv] <event> <json>` events received back from the add-in (e.g., `edit-complete`).
 
 ## Testing (e2e)
 
@@ -183,10 +190,12 @@ Notes:
 ```
 mcp_word/
 ├── server.js          # MCP stdio + Socket.IO bridge (HTTPS)
+├── tool.js            # MCP tool registration + Socket.IO forwarding
 ├── public/
 │   ├── manifest.xml   # Office add-in manifest
 │   ├── taskpane.html  # Minimal task pane
-│   └── taskpane.js    # Applies edit commands via Office.js
+│   ├── taskpane.js    # Applies edit commands via Office.js
+│   └── taskpane.yaml  # Script Lab snippet for import
 ├── test.sh            # E2E test runner (JSONL over stdio)
 ├── SPEC.md            # Refined spec
 └── README.md

@@ -123,6 +123,15 @@ const io = new IOServer(server, {
 
 io.on("connection", (socket) => {
   log("socket connected", { id: socket.id });
+  // Log any events coming back from the add-in (status, edit-complete, edit-error, etc.)
+  try {
+    socket.onAny((event, payload) => {
+      try {
+        // Record the raw JSON received from socket clients
+        if (DEBUG) fs.appendFile(debugLogPath, `[socket:recv] ${event} ${JSON.stringify(payload || {})}\n`, () => {});
+      } catch {}
+    });
+  } catch {}
   socket.on("disconnect", (reason) => {
     log("socket disconnected", { id: socket.id, reason });
   });
@@ -177,14 +186,30 @@ async function main() {
           buf = buf.subarray(total);
           try {
             const obj = JSON.parse(body);
-            if (obj && obj.method === "tools/call" && obj?.params?.name === "editTask") {
+            if (obj && obj.method === "tools/call" && obj?.params?.name) {
+              const toolName = obj.params.name;
               const args = obj.params.arguments || {};
+              try {
+                if (DEBUG) fs.appendFile(debugLogPath, `[socket:send] ${toolName} ${JSON.stringify(args)}\n`, () => {});
+              } catch {}
               // fire-and-forget; forward JSON object on event named by tool
-              try { io.emit("editTask", args); } catch {}
+              try { io.emit(toolName, args); } catch {}
             }
           } catch {}
         }
       });
+    } catch {}
+
+    // Tee STDOUT frames to debug.log without altering MCP output
+    try {
+      const originalWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = function(chunk, encoding, cb) {
+        try {
+          const data = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk ?? "");
+          fs.appendFile(debugLogPath, `[DEBUG stdout] ${data}\n`, () => {});
+        } catch {}
+        return originalWrite(chunk, encoding, cb);
+      };
     } catch {}
   }
 

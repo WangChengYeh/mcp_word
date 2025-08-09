@@ -24,7 +24,7 @@ flowchart LR
   4. forward the payload (MCP tool json string) to socket.io (in file tool.js)
   5. tool handling only in tool.js, server.js only forward json string or json object
   6. io.emit(tool name, tool params) to office add-in
-  6. office add-in: socket.io
+  7. office add-in: socket.io
 
 ### 3.2 Office Add-in (public/)
 #### `manifest.xml`
@@ -42,6 +42,11 @@ flowchart LR
 - Listens for 'MCP tool' events and call Word functions via `Word.run()`
 - Implements basic error handling
 
+#### `taskpane.yaml` (for Snippet import)
+-- script: as taskpane.js
+-- html: as taskpane.html
+-- libraries: add socket.io library
+-- upload to gist https://gist.github.com/WangChengYeh/5b44e6ba1c99baae62ebc0783e1469da
 ## 4. Workflow
 1. install the MCP server: `npm install`
 2. stdio from Codex CLI or fake master, use unix pipeline to provide input
@@ -80,7 +85,7 @@ The project README must include the following, in order:
 - Configure MCP client: Codex Client setup via `.codex/config.toml` (see 9.2).
 - Office add-in: two options:
   - Sideload `public/manifest.xml` in Word (points to `https://localhost:3000/taskpane.html`).
-  - Script Lab alternative: paste `public/taskpane.js` and add Socket.IO CDN `https://cdn.socket.io/4.7.5/socket.io.min.js`.
+  - Script Lab alternative: import snippets from https://gist.github.com/WangChengYeh/5b44e6ba1c99baae62ebc0783e1469da
 - Tools: document `editTask` (args and example frame) and `ping`.
 - Debugging: `--debug` behavior and `GET /healthz`.
 - Testing: how to run `./test.sh` and pipe custom MCP JSONL.
