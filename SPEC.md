@@ -66,7 +66,11 @@ flowchart LR
   {"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"FromSTDIN","action":"insert","target":"selection"}}}
   EOF
   The script extracts expected content from the first editTask; if none provided, the first ai-cmd event counts as success.
-## 8. Doc
+## 8. Integration Test
+- test.js Integration test: MCP client + MCP server (server.js) + office (public/taskpane.js)
+- MCP client: import { Client } from "@modelcontextprotocol/sdk/server/mcp.js"
+- MCP client: list tools and call a tool
+## 9 . Doc
 ### README.md for use step-by-step stall and run
 - Codex MCP setting, [mcp_servers.mcp_word] in .codex/config.toml
 - Word add-in: find 'Script Lab'
