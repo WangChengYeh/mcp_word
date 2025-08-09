@@ -67,10 +67,10 @@ flowchart LR
   EOF
   The script extracts expected content from the first editTask; if none provided, the first ai-cmd event counts as success.
 ## 8. Doc
-- README.md for use step-by-step stall and run
--- Codex MCP setting
--- Word add-in: Script Lab
---- Script: copy from task-pane.js, 
---- Libraries https://cdn.socket.io/4.7.5/socket.io.min.js
+### README.md for use step-by-step stall and run
+- Codex MCP setting, [mcp_servers.mcp_word] in .codex/config.toml
+- Word add-in: find 'Script Lab'
+- Script: copy from task-pane.js, 
+- Libraries https://cdn.socket.io/4.7.5/socket.io.min.js
 
-- Code / doc all english only
+### Code / doc all english only
