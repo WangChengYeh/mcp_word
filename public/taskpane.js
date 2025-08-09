@@ -12,7 +12,7 @@ let isConnected = false;
 
 function initializeAddIn() {
   // Establish WebSocket connection
-  socket = io();
+  socket = io("https://localhost:3000", {transports: ["websocket"]});
   
   socket.on('connect', function() {
     console.log('Connected to MCP proxy server');
