@@ -182,7 +182,7 @@ mcp.registerTool(
         .default("selection")
         .describe("cursor | selection | document"),
       taskId: z.string().optional().describe("Optional client-correlated id."),
-      meta: z.record(z.unknown()).optional().describe("Optional additional metadata."),
+      meta: z.string().optional().describe("Optional additional metadata."),
     },
   },
   async (args, _ctx) => {
