@@ -17,10 +17,34 @@ if [ ! -d node_modules ]; then
   npm install
 fi
 
-echo "[test] running e2e on port ${PORT}..."
-TEST_INPUT="${STDIN_BUFFER}" PORT="${PORT}" node --input-type=module - <<'NODE'
+echo "[test] preparing local TLS certs..."
+CERT_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t certs)"
+cat >"$CERT_DIR/openssl.cnf" <<'CONF'
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = localhost
+
+[v3_req]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
+CONF
+openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+  -keyout "$CERT_DIR/key.pem" -out "$CERT_DIR/cert.pem" \
+  -config "$CERT_DIR/openssl.cnf" >/dev/null 2>&1
+
+echo "[test] running e2e on port ${PORT} (HTTPS)..."
+TEST_INPUT="${STDIN_BUFFER}" PORT="${PORT}" KEY_PATH="$CERT_DIR/key.pem" CERT_PATH="$CERT_DIR/cert.pem" node --input-type=module - <<'NODE'
 import { spawn } from 'node:child_process';
-import http from 'node:http';
+import https from 'node:https';
 import { io } from 'socket.io-client';
 
 const port = Number(process.env.PORT || 3000);
@@ -29,7 +53,23 @@ const userLines = userInputRaw.trim()
   ? userInputRaw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length)
   : [];
 
-const server = spawn(process.execPath, ['server.js', '--port', String(port), '--debug'], {
+// accept self-signed certs in this test environment
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+const keyPath = process.env.KEY_PATH || '';
+const certPath = process.env.CERT_PATH || '';
+const pfxPath = process.env.PFX_PATH || '';
+const pfxPass = process.env.PFX_PASSPHRASE || '';
+
+const serverArgs = ['server.js', '--port', String(port), '--debug'];
+if (pfxPath) {
+  serverArgs.push('--pfx', pfxPath);
+  if (pfxPass) serverArgs.push('--passphrase', pfxPass);
+} else {
+  serverArgs.push('--key', keyPath, '--cert', certPath);
+}
+
+const server = spawn(process.execPath, serverArgs, {
   stdio: ['pipe', 'pipe', 'inherit']
 });
 
@@ -40,7 +80,7 @@ async function waitHealthz(timeoutMs = 10000) {
   while (Date.now() < deadline) {
     try {
       await new Promise((resolve, reject) => {
-        const req = http.get({ hostname: '127.0.0.1', port, path: '/healthz', timeout: 800 }, (res) => {
+        const req = https.get({ hostname: '127.0.0.1', port, path: '/healthz', timeout: 800, rejectUnauthorized: false }, (res) => {
           res.resume();
           (res.statusCode === 200) ? resolve() : reject(new Error('bad status'));
         });
@@ -70,7 +110,11 @@ function gracefulExit(code = 0) {
   try {
     await waitHealthz();
 
-    const socket = io(`http://127.0.0.1:${port}`, { transports: ['websocket'] });
+    const socket = io(`https://127.0.0.1:${port}`, {
+      transports: ['websocket'],
+      secure: true,
+      transportOptions: { websocket: { rejectUnauthorized: false } }
+    });
 
     await new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('socket connect timeout')), 8000);

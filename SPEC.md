@@ -68,3 +68,4 @@ flowchart LR
   The script extracts expected content from the first editTask; if none provided, the first ai-cmd event counts as success.
 ## 8. Doc
 - README.md for use step-by-step stall and run
+- Code / doc all english only

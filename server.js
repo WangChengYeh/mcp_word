@@ -3,7 +3,7 @@
 // Minimal MCP-like server over STDIO + Socket.IO bridge per SPEC.md
 
 import express from "express";
-import http from "http";
+import https from "https";
 import { Server as IOServer } from "socket.io";
 import fs from "fs";
 import path from "path";
@@ -28,17 +28,25 @@ const getFlagVal = (name, def) => {
 if (hasFlag("help")) {
   console.log(
     [
-      "Usage: node server.js [--port 3000] [--debug]",
+      "Usage: node server.js [--port 3000] [--key key.pem --cert cert.pem] [--pfx bundle.pfx --passphrase XXX] [--debug]",
       "",
       "Options:",
-      "  --port   HTTP/Socket.IO 監聽的埠號（預設 3000）",
-      "  --debug  啟用除錯日誌（寫入 debug.log）",
+      "  --port   HTTPS Socket.IO listen port (default 3000)",
+      "  --key    TLS private key file (PEM)",
+      "  --cert   TLS certificate file (PEM)",
+      "  --pfx    TLS certificate bundle (PFX/P12)",
+      "  --passphrase  TLS certificate passphrase (if required)",
+      "  --debug  Enable debug logging (writes debug.log)",
     ].join("\n")
   );
   process.exit(0);
 }
 const PORT = parseInt(getFlagVal("port", "3000"), 10);
 const DEBUG = hasFlag("debug");
+const HTTPS_KEY = getFlagVal("key");
+const HTTPS_CERT = getFlagVal("cert");
+const HTTPS_PFX = getFlagVal("pfx");
+const HTTPS_PASSPHRASE = getFlagVal("passphrase");
 
 // ---------- logger ----------
 const debugLogPath = path.join(process.cwd(), "debug.log");
@@ -69,18 +77,18 @@ function logErr(err, ctx = "error") {
   }
 }
 
-// ---------- HTTP + Socket.IO ----------
+// ---------- HTTPS + Socket.IO ----------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
 
-// 公開目錄：public/（符合 SPEC 的 Office Add-in 靜態檔）
+// Serve static Office Add-in files from public/
 const publicDir = path.join(process.cwd(), "public");
 app.use(express.static(publicDir));
 
-// 健康檢查端點
+// Health check endpoint
 app.get("/healthz", (req, res) => {
   try {
     const clients = io.engine ? io.engine.clientsCount : 0;
@@ -90,7 +98,23 @@ app.get("/healthz", (req, res) => {
   }
 });
 
-const server = http.createServer(app);
+const tlsOpts = {};
+try {
+  if (HTTPS_PFX) {
+    tlsOpts.pfx = fs.readFileSync(path.resolve(HTTPS_PFX));
+    if (HTTPS_PASSPHRASE) tlsOpts.passphrase = HTTPS_PASSPHRASE;
+  } else {
+    if (!HTTPS_KEY || !HTTPS_CERT) {
+      throw new Error("TLS required: provide --key and --cert (or use --pfx)");
+    }
+    tlsOpts.key = fs.readFileSync(path.resolve(HTTPS_KEY));
+    tlsOpts.cert = fs.readFileSync(path.resolve(HTTPS_CERT));
+  }
+} catch (e) {
+  console.error("Failed to read TLS materials:", e?.message || e);
+  process.exit(1);
+}
+const server = https.createServer(tlsOpts, app);
 const io = new IOServer(server, {
   cors: {
     origin: "*",
@@ -110,7 +134,7 @@ const mcp = new McpServer({
   version: "1.0.0",
 });
 
-// 共用：發送 editTask 到 Socket.IO
+// Shared: send editTask to Socket.IO clients
 async function emitEditTaskToClients(args) {
   try {
     log("editTask invoked", {
@@ -139,7 +163,7 @@ async function emitEditTaskToClients(args) {
   }
 }
 
-// 工具：editTask -> 透過 ai-cmd 廣播給 Add-in
+// Tool: editTask -> broadcast to Add-in via ai-cmd
 mcp.registerTool(
   "editTask",
   {
@@ -166,7 +190,7 @@ mcp.registerTool(
   }
 );
 
-// 工具：ping -> 回傳 pong 或輸入訊息
+// Tool: ping -> returns pong or input message
 mcp.registerTool(
   "ping",
   {
@@ -183,15 +207,15 @@ mcp.registerTool(
 
 // ---------- bootstrap ----------
 async function main() {
-  // 啟動 HTTP/Socket
+  // Start HTTPS/Socket
   await new Promise((resolve) => {
     server.listen(PORT, () => {
-      log(`HTTP/Socket.IO listening on http://localhost:${PORT}`);
+      log(`HTTPS/Socket.IO listening on https://localhost:${PORT}`);
       resolve();
     });
   });
 
-  // 在 debug 模式下，監看 STDIN 原始資料以協助除錯 MCP 流
+  // In debug mode, observe raw STDIN to help debug MCP frames
   if (DEBUG) {
     try {
       let buf = Buffer.alloc(0);
@@ -217,7 +241,7 @@ async function main() {
           const total = headerEnd + 4 + len;
           if (buf.length < total) break; // wait for more
           const body = buf.subarray(headerEnd + 4, total).toString("utf8");
-          // advance buffer
+          // Advance buffer
           buf = buf.subarray(total);
           try {
             const obj = JSON.parse(body);
@@ -232,16 +256,16 @@ async function main() {
     } catch {}
   }
 
-  // 連線 MCP STDIO
+  // Connect MCP STDIO
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
   log("MCP server connected via STDIO");
 
-  // 優雅關閉
+  // Graceful shutdown
   const shutdown = async (signal = "SIGTERM") => {
     try {
       log(`shutting down (${signal})...`);
-      server.close(() => log("HTTP server closed"));
+      server.close(() => log("HTTPS server closed"));
       if (io && io.close) io.close();
       if (transport && transport.close) await transport.close();
     } catch (e) {
