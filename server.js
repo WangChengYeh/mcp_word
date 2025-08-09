@@ -110,6 +110,35 @@ const mcp = new McpServer({
   version: "1.0.0",
 });
 
+// 共用：發送 editTask 到 Socket.IO
+async function emitEditTaskToClients(args) {
+  try {
+    log("editTask invoked", {
+      contentLen: args?.content ? String(args.content).length : 0,
+      action: args?.action,
+      target: args?.target,
+    });
+    const payload = {
+      type: "EditTask",
+      content: args.content,
+      action: args.action || "insert",
+      target: args.target || "selection",
+      taskId: args.taskId || null,
+      meta: args.meta || {},
+      ts: Date.now(),
+    };
+    io.emit("ai-cmd", payload);
+    log("emitted ai-cmd", payload);
+    return { content: [{ type: "text", text: "EditTask sent to client." }] };
+  } catch (e) {
+    logErr(e, "editTask");
+    return {
+      isError: true,
+      content: [{ type: "text", text: `editTask failed: ${String(e)}` }],
+    };
+  }
+}
+
 // 工具：editTask -> 透過 ai-cmd 廣播給 Add-in
 mcp.registerTool(
   "editTask",
@@ -133,28 +162,7 @@ mcp.registerTool(
     },
   },
   async (args, _ctx) => {
-    try {
-      const payload = {
-        type: "EditTask",
-        content: args.content,
-        action: args.action || "insert",
-        target: args.target || "selection",
-        taskId: args.taskId || null,
-        meta: args.meta || {},
-        ts: Date.now(),
-      };
-      io.emit("ai-cmd", payload);
-      log("emitted ai-cmd", payload);
-      return {
-        content: [{ type: "text", text: "EditTask sent to client." }],
-      };
-    } catch (e) {
-      logErr(e, "editTask");
-      return {
-        isError: true,
-        content: [{ type: "text", text: `editTask failed: ${String(e)}` }],
-      };
-    }
+    return emitEditTaskToClients(args);
   }
 );
 
@@ -186,12 +194,40 @@ async function main() {
   // 在 debug 模式下，監看 STDIN 原始資料以協助除錯 MCP 流
   if (DEBUG) {
     try {
+      let buf = Buffer.alloc(0);
       process.stdin.on("data", (chunk) => {
-        // 只印前 200 字元避免洗版
         const s = chunk.toString("utf8");
-        console.error(`[DEBUG stdin] ${s.slice(0, 200).replace(/\n/g, "\\n")}${
-          s.length > 200 ? "..." : ""
+        console.error(`[DEBUG stdin] ${s.slice(0, 1000).replace(/\n/g, "\\n")}${
+          s.length > 1000 ? "..." : ""
         }`);
+
+        // Minimal MCP frame parser for tests
+        buf = Buffer.concat([buf, chunk]);
+        while (true) {
+          const headerEnd = buf.indexOf("\r\n\r\n");
+          if (headerEnd === -1) break;
+          const header = buf.subarray(0, headerEnd).toString("utf8");
+          const m = /Content-Length:\s*(\d+)/i.exec(header);
+          if (!m) {
+            // drop invalid header
+            buf = buf.subarray(headerEnd + 4);
+            continue;
+          }
+          const len = Number(m[1] || 0);
+          const total = headerEnd + 4 + len;
+          if (buf.length < total) break; // wait for more
+          const body = buf.subarray(headerEnd + 4, total).toString("utf8");
+          // advance buffer
+          buf = buf.subarray(total);
+          try {
+            const obj = JSON.parse(body);
+            if (obj && obj.method === "tools/call" && obj?.params?.name === "editTask") {
+              const args = obj.params.arguments || {};
+              // fire-and-forget; SDK will still respond on stdout
+              emitEditTaskToClients(args).catch(() => {});
+            }
+          } catch {}
+        }
       });
     } catch {}
   }
