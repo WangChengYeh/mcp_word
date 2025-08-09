@@ -11,7 +11,7 @@ MCP_WORD build a MCP server (`node server.js`) alongside an Office.js Word Add-i
 ## 2. Architecture Overview
 ```mermaid
 flowchart LR
-  Claude CLI -- (stdio) -- MCP Server -- (WebSocket) -- Office.js
+  Codex CLI -- (stdio) -- MCP Server -- (WebSocket) -- Office.js
 ```
 
 
@@ -41,9 +41,9 @@ flowchart LR
 
 ## 4. Workflow
 1. install the MCP server: `npm install`
-2. STDIO from Claude CLI or fake master, use unix pipeline to provide input
+2. STDIO from Codex CLI or fake master, use unix pipeline to provide input
 3. Sideload the Add-in manifest in Word
-4. Send `EditTask` requests via Claude CLI or another service, e.g. `{ content: '...' }`
+4. Send `EditTask` requests via Codex CLI or another service, e.g. `{ content: '...' }`
 5. The Add-in client receives edits in real time and applies them to the document
 
 ## 5. Extensibility
@@ -68,4 +68,9 @@ flowchart LR
   The script extracts expected content from the first editTask; if none provided, the first ai-cmd event counts as success.
 ## 8. Doc
 - README.md for use step-by-step stall and run
+-- Codex MCP setting
+-- Word add-in: Script Lab
+--- Script: copy from task-pane.js, 
+--- Libraries https://cdn.socket.io/4.7.5/socket.io.min.js
+
 - Code / doc all english only
