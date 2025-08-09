@@ -12,6 +12,7 @@ let isConnected = false;
 
 function initializeAddIn() {
   // Establish WebSocket connection
+  // Use same-origin Socket.IO by default to match manifest SourceLocation
   socket = io("https://localhost:3000", {transports: ["websocket"]});
   
   socket.on('connect', function() {
@@ -35,9 +36,9 @@ function initializeAddIn() {
     updateStatus('Disconnected from server');
   });
   
-  // Listen for AI command events
-  socket.on('ai-cmd', function(editCommand) {
-    console.log('Received edit command:', editCommand);
+  // Listen for tool-named events (editTask)
+  socket.on('editTask', function(editCommand) {
+    console.log('Received editTask:', editCommand);
     handleEditCommand(editCommand);
   });
   
@@ -48,29 +49,38 @@ function initializeAddIn() {
 }
 
 async function handleEditCommand(editCommand) {
-  const { editId, content, operation = 'insert', position = 'cursor' } = editCommand;
+  // Align with SPEC: { content, action: 'insert'|'replace'|'append', target: 'cursor'|'selection'|'document' }
+  const { taskId, content, action = 'insert', target = 'selection' } = editCommand || {};
   
   try {
     await Word.run(async (context) => {
       let range;
+      const body = context.document.body;
       
-      // Determine insertion point based on position
-      switch (position) {
-        case 'start':
-          range = context.document.body.getRange('Start');
-          break;
-        case 'end':
-          range = context.document.body.getRange('End');
+      // Determine insertion target
+      switch (target) {
+        case 'document':
+          // For document-level actions, prefer end insertion; replace clears body first
+          if (action === 'replace') {
+            body.clear();
+            // Insert at start after clearing
+            body.insertParagraph(content, Word.InsertLocation.start);
+            await context.sync();
+            emitComplete(`Replaced entire document`);
+            return;
+          } else if (action === 'append' || action === 'insert') {
+            range = body.getRange('End');
+          }
           break;
         case 'cursor':
+        case 'selection':
         default:
-          // Use selection or cursor position
           range = context.document.getSelection();
           break;
       }
       
       // Perform edit operation
-      switch (operation) {
+      switch (action) {
         case 'insert':
           range.insertText(content, Word.InsertLocation.after);
           break;
@@ -81,21 +91,21 @@ async function handleEditCommand(editCommand) {
           range.insertText('\n' + content, Word.InsertLocation.after);
           break;
         default:
-          throw new Error(`Unsupported operation: ${operation}`);
+          throw new Error(`Unsupported action: ${action}`);
       }
       
       await context.sync();
       
       // Send success response
       socket.emit('edit-complete', {
-        editId,
+        taskId,
         success: true,
-        message: `Successfully ${operation}ed text at ${position}`,
+        message: `Successfully ${action} on ${target}`,
         timestamp: new Date().toISOString()
       });
       
-      console.log(`Edit operation completed: ${editId}`);
-      updateStatus(`Edit completed: ${operation}`);
+      console.log(`Edit completed: ${taskId || 'no-id'}`);
+      updateStatus(`Edit completed: ${action}`);
     });
     
   } catch (error) {
@@ -103,12 +113,21 @@ async function handleEditCommand(editCommand) {
     
     // Send error response
     socket.emit('edit-error', {
-      editId,
+      taskId,
       error: error.message || 'Unknown error occurred',
       timestamp: new Date().toISOString()
     });
     
     updateStatus(`Edit failed: ${error.message}`);
+  }
+
+  function emitComplete(message) {
+    socket.emit('edit-complete', {
+      taskId,
+      success: true,
+      message,
+      timestamp: new Date().toISOString(),
+    });
   }
 }
 

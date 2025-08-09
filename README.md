@@ -122,7 +122,7 @@ Two ways to connect Word to the server:
 ## Tools
 
 ### editTask
-- purpose: Send an edit instruction to the add-in via Socket.IO (`ai-cmd`).
+- purpose: Send an edit instruction to the add-in via Socket.IO (event name `editTask`).
 - args:
   - `content` (string, required): text to insert/replace
   - `action` ("insert" | "replace" | "append", default "insert")
@@ -174,7 +174,8 @@ EOF
 ```
 
 Notes:
-- The script extracts expected content from the first `editTask` line; if none provided, the first `ai-cmd` counts as success.
+- The proxy emits Socket.IO events named by the MCP tool. For `editTask`, the event is `editTask` and the payload is the tool arguments object.
+- The script extracts expected content from the first `editTask` line.
 - Accepts self-signed certs for test convenience.
 
 ## Project Structure

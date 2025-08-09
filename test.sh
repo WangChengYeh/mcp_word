@@ -167,8 +167,8 @@ function gracefulExit(code = 0) {
     }
 
     await new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('ai-cmd not received')), 10000);
-      socket.on('ai-cmd', (data) => {
+      const t = setTimeout(() => reject(new Error('editTask not received')), 10000);
+      socket.on('editTask', (data) => {
         if (!expectedContent) {
           console.log('TEST_PASS');
           clearTimeout(t);

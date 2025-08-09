@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import process from "process";
 import { fileURLToPath } from "url";
-import { z } from "zod";
+// schemas and tool registration moved to tool.js
 
 // MCP SDK
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -134,76 +134,8 @@ const mcp = new McpServer({
   version: "1.0.0",
 });
 
-// Shared: send editTask to Socket.IO clients
-async function emitEditTaskToClients(args) {
-  try {
-    log("editTask invoked", {
-      contentLen: args?.content ? String(args.content).length : 0,
-      action: args?.action,
-      target: args?.target,
-    });
-    const payload = {
-      type: "EditTask",
-      content: args.content,
-      action: args.action || "insert",
-      target: args.target || "selection",
-      taskId: args.taskId || null,
-      meta: args.meta || {},
-      ts: Date.now(),
-    };
-    io.emit("ai-cmd", payload);
-    log("emitted ai-cmd", payload);
-    return { content: [{ type: "text", text: "EditTask sent to client." }] };
-  } catch (e) {
-    logErr(e, "editTask");
-    return {
-      isError: true,
-      content: [{ type: "text", text: `editTask failed: ${String(e)}` }],
-    };
-  }
-}
-
-// Tool: editTask -> broadcast to Add-in via ai-cmd
-mcp.registerTool(
-  "editTask",
-  {
-    description:
-      "Send an edit task to the Office Add-in via WebSocket (event: ai-cmd).",
-    inputSchema: {
-      content: z
-        .string()
-        .describe("Text to insert/replace in the Word document."),
-      action: z
-        .enum(["insert", "replace", "append"])
-        .default("insert")
-        .describe("insert | replace | append"),
-      target: z
-        .enum(["cursor", "selection", "document"]) 
-        .default("selection")
-        .describe("cursor | selection | document"),
-      taskId: z.string().optional().describe("Optional client-correlated id."),
-      meta: z.string().optional().describe("Optional additional metadata."),
-    },
-  },
-  async (args, _ctx) => {
-    return emitEditTaskToClients(args);
-  }
-);
-
-// Tool: ping -> returns pong or input message
-mcp.registerTool(
-  "ping",
-  {
-    description: "Health check tool.",
-    inputSchema: {
-      message: z.string().optional(),
-    },
-  },
-  async (args, _ctx) => {
-    const text = args?.message || "pong";
-    return { content: [{ type: "text", text }] };
-  }
-);
+// Tools are defined in tool.js
+import { registerTools } from "./tool.js";
 
 // ---------- bootstrap ----------
 async function main() {
@@ -247,8 +179,8 @@ async function main() {
             const obj = JSON.parse(body);
             if (obj && obj.method === "tools/call" && obj?.params?.name === "editTask") {
               const args = obj.params.arguments || {};
-              // fire-and-forget; SDK will still respond on stdout
-              emitEditTaskToClients(args).catch(() => {});
+              // fire-and-forget; forward JSON object on event named by tool
+              try { io.emit("editTask", args); } catch {}
             }
           } catch {}
         }
@@ -257,6 +189,9 @@ async function main() {
   }
 
   // Connect MCP STDIO
+  // Register tools (editTask & ping) BEFORE connecting transport
+  registerTools(mcp, io, log, logErr);
+
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
   log("MCP server connected via STDIO");

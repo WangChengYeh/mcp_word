@@ -110,8 +110,8 @@ async function main() {
     // Call editTask and expect ai-cmd with matching content
     const expected = 'FromIntegrationTest-' + Math.random().toString(36).slice(2);
     const aiCmdPromise = new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('ai-cmd timeout')), 10000);
-      socket.on('ai-cmd', (data) => {
+      const t = setTimeout(() => reject(new Error('editTask timeout')), 10000);
+      socket.on('editTask', (data) => {
         if (data && data.content === expected) {
           clearTimeout(t);
           resolve();
