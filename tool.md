@@ -107,7 +107,7 @@ Args:
 - `scope` (`document | selection | rangeId:<id>`, default `selection`)
 - `location` (`start | end | before | after | replace`, default `replace`)
 - `newParagraph` (boolean, default `false`)
-- `keepFormatting` (boolean, default `true`)
+- `keepFormatting` (boolean, default `true`) — provider MAY ignore; Word `insertText` inherits formatting by design.
 
 Returns: `{ rangeId: string, length: number }`
 
@@ -129,7 +129,7 @@ Example `meta`:
 Office.js mapping:
 - Resolve `targetRange` by `scope`:
   - `selection` -> `const target = context.document.getSelection();`
-  - `document` -> `const target = context.document.body;` (use `insertText` on `Body` with `location`)
+  - `document` -> `const target = context.document.body;` (Body supports `Start`/`End`; `Replace/Before/After` are not applicable)
   - `rangeId:<id>` -> look up tracked `Word.Range` by id.
 - Insert:
   - If `newParagraph` and `location` in `start|end|replace`, use `insertParagraph(text, location)`; else `insertText(text, location)`.
@@ -186,6 +186,9 @@ Args:
 - `matchCase` (boolean, default `false`)
 - `matchWholeWord` (boolean, default `false`)
 - `matchPrefix` (boolean, default `false`)
+- `matchSuffix` (boolean, default `false`)
+- `ignoreSpace` (boolean, default `false`)
+- `ignorePunct` (boolean, default `false`)
 - `maxResults` (number, default `100`)
 
 Returns:
@@ -210,6 +213,7 @@ Office.js mapping and notes:
 - Use `context.document.body.search(query, { matchCase, matchWholeWord, matchPrefix, matchWildcards })`.
 - `useRegex`: not natively supported. Providers MAY translate simple regexes to Word wildcards or return `{ ok: false, code: "E_UNSUPPORTED" }`.
 - Load results: `results.load(["text"]); await context.sync();` Then track each `Range` and return `rangeId`s.
+ - Word.SearchOptions also supports `matchSuffix`, `ignoreSpace`, `ignorePunct`.
 
 Authoring tips (NL → meta):
 - Say: "Find all 'Invoice' (whole word)" →
@@ -298,6 +302,7 @@ Office.js mapping and notes:
 - At selection/range: `range.insertInlinePictureFromBase64(base64, location)`; at document: `context.document.body.insertInlinePictureFromBase64(base64, location)`.
 - Sizing: after insertion, set `pic.width`/`pic.height` if provided; if one dimension provided, maintain aspect ratio when `lockAspectRatio=true`.
 - Wrapping: Office.js inline pictures do not support floating wrap via this API; treat `wrapType` other than `inline` as `{ ok:false, code:"E_UNSUPPORTED" }` unless provider supports shapes.
+ - Alt text: map `altText` to `inlinePicture.altTextDescription` (and optionally `altTextTitle`).
 
 Authoring tips (NL → meta):
 - Say: "Insert logo from URL at cursor, width 120pt" →
@@ -379,26 +384,40 @@ Authoring tips (NL → meta):
 
 ## applyStyle
 
-Purpose: apply character and paragraph styles to a target range.
+Purpose: apply named styles (Heading, Quote, etc.) and/or direct formatting (font size, bold, alignment) to a target range.
+
+Key principles
+- Named styles set baseline formatting on paragraphs or character runs. Direct formatting then overrides the baseline.
+- Recommended order: apply namedStyle first, then apply paragraph (`para`) and character (`char`) overrides.
 
 Args:
 - `scope` (`selection | document | rangeId:<id>`, default `selection`)
-- `char`:
+- `namedStyle` (string; e.g., `Normal`, `Heading 1`, `Title`) — paragraph or character style; provider chooses the appropriate target based on style kind when known.
+- `char` (direct character formatting overrides):
   - `bold?` (boolean)
   - `italic?` (boolean)
   - `underline?` (`none | single | double`)
+  - `strikeThrough?` (boolean)
+  - `doubleStrikeThrough?` (boolean)
+  - `allCaps?` (boolean)
+  - `smallCaps?` (boolean)
+  - `superscript?` (boolean)
+  - `subscript?` (boolean)
   - `fontName?` (string)
   - `fontSize?` (number, pt)
-  - `color?` (string text color)
-  - `highlight?` (string background color)
-- `para`:
+  - `color?` (string; text color)
+  - `highlight?` (string; text highlight color)
+- `para` (direct paragraph formatting overrides):
   - `alignment?` (`left | center | right | justify`)
   - `lineSpacing?` (number, e.g., 1.15)
   - `spaceBefore?` (number, pt)
   - `spaceAfter?` (number, pt)
+  - `leftIndent?` (number, pt)
+  - `rightIndent?` (number, pt)
+  - `firstLineIndent?` (number, pt)
   - `list?` (`none | bullet | number`)
-- `namedStyle` (string; e.g., `Normal`, `Heading 1`, `Title`)
-- `clearOtherStyles` (boolean, default `false`)
+- `precedence` (`styleThenOverrides | overridesThenStyle`, default `styleThenOverrides`) — controls application order if both are provided.
+- `resetDirectFormatting` (boolean, default `false`) — when true, provider should clear existing direct formatting before applying settings (e.g., by reapplying `Normal` and then the desired `namedStyle`/overrides).
 
 Returns: `{ rangeId: string }`
 
@@ -410,21 +429,22 @@ Example:
   "version": "1.0",
   "args": {
     "scope": "selection",
-    "char": { "bold": true, "fontSize": 12, "color": "#333333" },
-    "para": { "alignment": "justify", "lineSpacing": 1.15 },
-    "namedStyle": "Normal"
+    "namedStyle": "Heading 1",
+    "para": { "alignment": "justify", "lineSpacing": 1.15, "firstLineIndent": 18 },
+    "char": { "bold": true, "fontSize": 14, "color": "#333333" },
+    "precedence": "styleThenOverrides"
   }
 }
 ```
 
 Office.js mapping:
 - Resolve target range; for `document` use `context.document.body.getRange()`.
-- Named style: `range.style = "Heading 1"` (where supported) or apply paragraph style via `range.paragraphs.items.forEach(p => p.style = ...)`.
-- Character formatting: `range.font.bold/italic/underline/fontSize/color/highlightColor`.
-- Paragraph formatting: `range.paragraphFormat.alignment/lineSpacing/spaceBefore/spaceAfter`.
+- Named style: set `range.style = "Heading 1"` (applies to paragraphs intersecting the range). For character styles, apply to the selection/range; provider may need to ensure the selection is text-only.
+- Character formatting: map to `range.font` properties: `bold`, `italic`, `underline`, `strikeThrough`, `doubleStrikeThrough`, `allCaps`, `smallCaps`, `superscript`, `subscript`, `name`, `size`, `color`, `highlightColor`.
+- Paragraph formatting: map to `range.paragraphFormat` properties: `alignment`, `lineSpacing`, `spaceBefore`, `spaceAfter`, `leftIndent`, `rightIndent`, `firstLineIndent`.
 - Lists:
-  - `bullet`: `range.paragraphs.load(); await context.sync(); range.paragraphs.items.forEach(p => p.startNewList());` then set as bullet style if available.
-  - `number`: same as above but set numbering. If not supported, return `E_UNSUPPORTED`.
+  - `bullet`: where supported, use `Paragraph.startNewList()` and set bullet type; otherwise apply named style "List Paragraph" as a fallback.
+  - `number`: similar approach for numbered lists. If API not available, return `E_UNSUPPORTED`.
 - Clearing: if `clearOtherStyles=true`, remove direct formatting by reapplying `Normal` then re-apply specified overrides.
 
 Authoring tips (NL → meta):
@@ -513,11 +533,13 @@ Suggested response shape (extended):
   - `context.document.body.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
   - `context.document.body.insertTable(rows, cols, Word.InsertLocation, data?)`
   - `context.document.body.getOoxml()` (optional: advanced providers may inspect OOXML)
+  - `context.document.body.getOoxml()` (optional: advanced providers may inspect OOXML)
 
 - Range
   - `range.insertText(text, Word.InsertLocation)`
   - `range.insertParagraph(text, Word.InsertLocation)`
   - `range.search(query, options)`
+  - `range.getOoxml()` (optional)
   - `range.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
   - `range.insertTable(rows, cols, Word.InsertLocation, data?)`
   - `range.getOoxml()` (optional)
@@ -542,7 +564,7 @@ Suggested response shape (extended):
 
 - Enums and options
   - `Word.InsertLocation` (`Start | End | Before | After | Replace`)
-  - `Word.SearchOptions` fields: `matchCase`, `matchWholeWord`, `matchPrefix`, `matchWildcards`
+  - `Word.SearchOptions` fields: `matchCase`, `matchWholeWord`, `matchPrefix`, `matchSuffix`, `ignoreSpace`, `ignorePunct`, `matchWildcards`
 
 
 ## Types (suggested TypeScript for validation)
@@ -604,6 +626,38 @@ export interface ListStylesArgs {
   builtInOnly?: boolean;
   includeLocalized?: boolean;
   max?: number;
+}
+
+export interface ApplyStyleArgs {
+  scope?: Scope;
+  namedStyle?: string;
+  char?: {
+    bold?: boolean;
+    italic?: boolean;
+    underline?: "none" | "single" | "double";
+    strikeThrough?: boolean;
+    doubleStrikeThrough?: boolean;
+    allCaps?: boolean;
+    smallCaps?: boolean;
+    superscript?: boolean;
+    subscript?: boolean;
+    fontName?: string;
+    fontSize?: number;
+    color?: string;
+    highlight?: string;
+  };
+  para?: {
+    alignment?: "left" | "center" | "right" | "justify";
+    lineSpacing?: number;
+    spaceBefore?: number;
+    spaceAfter?: number;
+    leftIndent?: number;
+    rightIndent?: number;
+    firstLineIndent?: number;
+    list?: "none" | "bullet" | "number";
+  };
+  precedence?: "styleThenOverrides" | "overridesThenStyle";
+  resetDirectFormatting?: boolean;
 }
 ```
 
