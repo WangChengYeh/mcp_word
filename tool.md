@@ -95,6 +95,7 @@ Validation guidance (what to expect on errors):
 - insertPicture: insert image from URL or base64
 - table.*: create and modify tables
 - applyStyle: apply character/paragraph styles
+- listStyles: list available named styles (paragraph/character/table)
 
 
 ## insertText
@@ -450,6 +451,53 @@ Authoring tips (NL → meta):
 - Versioning: include `version` in payloads; add-in may use it for compatibility.
 
 
+## listStyles
+
+Purpose: provide a list of style names that can be used with `applyStyle` and `table.applyStyle`. Use this to power style pickers or validate style names.
+
+Args:
+- `category` (`paragraph | character | table | all`, default `all`)
+- `query` (string; optional name substring filter)
+- `builtInOnly` (boolean; default `true`)
+- `includeLocalized` (boolean; default `true`) — when available, include localized display names in addition to canonical names.
+- `max` (number; optional cap on returned items)
+
+Returns:
+```json
+{
+  "paragraphStyles": [ { "name": "Normal", "builtIn": true }, ... ],
+  "characterStyles": [ { "name": "Emphasis", "builtIn": true }, ... ],
+  "tableStyles": [ { "name": "Table Grid", "builtIn": true }, ... ]
+}
+```
+
+Example `meta`:
+```json
+{ "type": "word.op", "op": "listStyles", "version": "1.0", "args": { "category": "paragraph" } }
+```
+
+Office.js mapping and notes:
+- Word JavaScript API does not currently expose a direct enumeration of all styles. Providers SHOULD:
+  - Return a curated list of common built-ins (see `task.md`).
+  - Optionally verify availability by attempting to apply the style to a temporary paragraph or table created at `End`, then removing it.
+  - Optionally augment with tenant/template-specific styles from configuration.
+- For localized clients, providers MAY return both canonical English `name` and a `localizedName` field when known.
+- If `query` is present, filter case-insensitively on `name` and `localizedName`.
+
+Suggested response shape (extended):
+```json
+{
+  "ok": true,
+  "op": "listStyles",
+  "data": {
+    "paragraphStyles": [ { "name": "Normal", "localizedName": "Normal", "builtIn": true } ],
+    "characterStyles": [ { "name": "Emphasis", "builtIn": true } ],
+    "tableStyles": [ { "name": "Table Grid Light", "builtIn": true } ]
+  }
+}
+```
+
+
 ## Office.js API Used
 
 - Core batching
@@ -464,6 +512,7 @@ Authoring tips (NL → meta):
   - `context.document.body.search(query, options)`
   - `context.document.body.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
   - `context.document.body.insertTable(rows, cols, Word.InsertLocation, data?)`
+  - `context.document.body.getOoxml()` (optional: advanced providers may inspect OOXML)
 
 - Range
   - `range.insertText(text, Word.InsertLocation)`
@@ -471,6 +520,7 @@ Authoring tips (NL → meta):
   - `range.search(query, options)`
   - `range.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
   - `range.insertTable(rows, cols, Word.InsertLocation, data?)`
+  - `range.getOoxml()` (optional)
   - `range.load(props)`
   - `range.track()` / `range.untrack()`
   - `range.style` (property)
@@ -546,6 +596,14 @@ export interface InsertPictureArgs {
 
 export interface TableCreateArgs {
   rows: number; cols: number; scope?: Scope; location?: Location; data?: string[][]; header?: boolean;
+}
+
+export interface ListStylesArgs {
+  category?: "paragraph" | "character" | "table" | "all";
+  query?: string;
+  builtInOnly?: boolean;
+  includeLocalized?: boolean;
+  max?: number;
 }
 ```
 
