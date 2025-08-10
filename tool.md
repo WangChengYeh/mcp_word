@@ -57,6 +57,7 @@ Range identity management (add-in guidance): when returning a `rangeId`, call `r
 - table.applyStyle
 - applyStyle
 - listStyles
+- listParagraphs
 
 ## MCP Tools (detailed)
 
@@ -454,6 +455,46 @@ Suggested response shape (extended):
 ```
 
 
+<a id="op-listParagraphs"></a>
+## listParagraphs
+
+Purpose: enumerate paragraphs within a scope and ensure each paragraph has an associated content control to provide a stable identifier for selection.
+
+Socket.IO event: `word:listParagraphs`
+
+Args:
+- `scope` (`document | selection | rangeId:<id>`, default `document`)
+- `createControls` (boolean, default `true`) — when true, create a content control for any paragraph that lacks one.
+- `controlTagPrefix` (string, default `"mcp-paragraph"`) — used when creating new controls as `tag = "<prefix>:<index>"`.
+- `includeText` (boolean, default `true`) — include paragraph text.
+- `maxChars` (number, optional) — when set, return `excerpt` limited to this length.
+- `filterEmpty` (boolean, default `true`) — exclude empty paragraphs from results.
+
+Returns:
+```json
+{
+  "paragraphs": [
+    {
+      "index": 0,
+      "text": "First paragraph text...",
+      "excerpt": "First para...",
+      "rangeId": "rangeId:abc",
+      "ccId": 42,
+      "ccTag": "mcp-paragraph:0"
+    }
+  ]
+}
+```
+
+Office.js mapping and notes:
+- Resolve base via `scope` and load `base.paragraphs`.
+- Iterate paragraphs: for each paragraph `p`, get `const r = p.getRange()`.
+- Try to find an enclosing content control via `r.parentContentControl` (load `id`, `tag`, `title`).
+- If none and `createControls=true`, do `const cc = p.insertContentControl(); cc.tag = "<prefix>:<index>"; cc.title = cc.tag;`.
+- Track each paragraph range to return a `rangeId` if desired; return `cc.id` and `cc.tag` when available.
+- Use `p.text` for text; if `maxChars` provided, compute a shorter `excerpt`.
+
+
 ## Office.js API Used
 
 - Core batching
@@ -483,6 +524,9 @@ Suggested response shape (extended):
   - `range.font.bold | italic | underline | fontSize | color | highlightColor` (properties)
   - `range.paragraphFormat.alignment | lineSpacing | spaceBefore | spaceAfter` (properties)
   - `range.paragraphs` (collection)
+  - `paragraph.insertContentControl()`
+  - `range.parentContentControl` (property)
+  - `contentControl.id | tag | title` (properties)
 
 - Tables
   - `table.addRows(Word.InsertLocation, count)`
