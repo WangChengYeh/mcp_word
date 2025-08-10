@@ -54,6 +54,38 @@ Conventions and types:
 Range identity management (add-in guidance): when returning a `rangeId`, call `range.track()` and `context.trackedObjects.add(range)`, store it in an internal map keyed by a generated id, and return that id. On subsequent calls with `rangeId`, look up the tracked object; periodically untrack when no longer needed.
 
 
+## Meta JSON Quick Reference (for AI authors)
+
+Use these rules and templates to author `meta` JSON confidently.
+
+- Required keys: `type` = `"word.op"`, `op` = one of the operations, `version` (e.g., `"1.0"`), and `args` object.
+- Scope defaults: omit `scope` to use `selection`. Use `"document"` for whole doc; use `"rangeId:<id>"` to target a saved range.
+- Location defaults: prefer `location`. If not set, providers treat text insert as `replace` at selection; aliases: `append -> end`, `prepend -> start`.
+- Keep it minimal: only include arguments you actually need; defaults cover the rest.
+
+Canonical template:
+```json
+{
+  "type": "word.op",
+  "op": "<insertText|getSelection|search|replace|insertPicture|table.*|applyStyle>",
+  "version": "1.0",
+  "args": { /* see per-op sections */ }
+}
+```
+
+Common field aliases the provider accepts:
+- `where` -> `location`
+- `insert` (when selection collapsed) -> `location: "replace"` (provider MAY map)
+- `append` -> `location: "end"`, `prepend` -> `location: "start"`
+- `tableId:<id>` or `rangeId:<id>` can be used in `tableRef`
+
+Validation guidance (what to expect on errors):
+- Missing required field: `{ ok:false, code:"E_INVALID_ARG", diagnostics:[{"msg":"<field> required"}] }`
+- Unsupported features (e.g., true regex search, picture wrap types): `{ ok:false, code:"E_UNSUPPORTED" }`
+- Not found (bad `rangeId`/`tableRef`): `{ ok:false, code:"E_NOT_FOUND" }`
+
+
+
 ## Operation Index
 
 - insertText: insert or replace text
@@ -110,6 +142,14 @@ Office.js mapping:
   });
   ```
 
+Authoring tips (NL → meta):
+- Say: "Insert 'Hello' at the start of the document" →
+  {"type":"word.op","op":"insertText","version":"1.0","args":{"text":"Hello","scope":"document","location":"start"}}
+- Say: "Replace current selection with 'OK'" →
+  {"type":"word.op","op":"insertText","version":"1.0","args":{"text":"OK","location":"replace"}}
+- Say: "Append a new paragraph 'Thanks'" →
+  {"type":"word.op","op":"insertText","version":"1.0","args":{"text":"Thanks","scope":"document","location":"end","newParagraph":true}}
+
 
 ## getSelection
 
@@ -129,6 +169,9 @@ Example `meta`:
 Office.js mapping:
 - `const sel = context.document.getSelection(); sel.load(["text", "start", "end"]); await context.sync();`
 - Return `{ text: sel.text, rangeId: <tracked id>, start?, end? }`. Track the range and return an id.
+
+Authoring tip:
+- Say: "Get current selection" → {"type":"word.op","op":"getSelection","version":"1.0","args":{}}
 
 
 ## search
@@ -167,6 +210,12 @@ Office.js mapping and notes:
 - `useRegex`: not natively supported. Providers MAY translate simple regexes to Word wildcards or return `{ ok: false, code: "E_UNSUPPORTED" }`.
 - Load results: `results.load(["text"]); await context.sync();` Then track each `Range` and return `rangeId`s.
 
+Authoring tips (NL → meta):
+- Say: "Find all 'Invoice' (whole word)" →
+  {"type":"word.op","op":"search","version":"1.0","args":{"query":"Invoice","matchWholeWord":true}}
+- Say: "Case-sensitive search for 'Total' in selection" →
+  {"type":"word.op","op":"search","version":"1.0","args":{"query":"Total","scope":"selection","matchCase":true}}
+
 
 ## replace
 
@@ -202,6 +251,12 @@ Office.js mapping:
 - For each range: `range.insertText(replaceWith, Word.InsertLocation.replace)`.
 - Count successful replacements; return `{ replaced }`.
 
+Authoring tips (NL → meta):
+- Say: "Replace all 2024 with 2025 in the document" →
+  {"type":"word.op","op":"replace","version":"1.0","args":{"target":"searchQuery","query":"2024","replaceWith":"2025","mode":"replaceAll"}}
+- Say: "Replace the first match of 'foo' with 'bar' in the selection" →
+  {"type":"word.op","op":"replace","version":"1.0","args":{"target":"searchQuery","query":"foo","replaceWith":"bar","mode":"replaceFirst","scope":"selection"}}
+
 
 ## insertPicture
 
@@ -211,7 +266,7 @@ Args:
 - `source` (`url | base64`)
 - `data` (string; URL or base64)
 - `scope` (`document | selection | rangeId:<id>`, default `selection`)
-- `where` (`insert | before | after | start | end`, default `insert`)
+- `location` (`start | end | before | after | replace`, default `replace`)
 - `width` (number, pt; optional)
 - `height` (number, pt; optional)
 - `lockAspectRatio` (boolean, default `true`)
@@ -229,7 +284,7 @@ Example:
   "args": {
     "source": "url",
     "data": "https://example.com/logo.png",
-    "where": "insert",
+    "location": "replace",
     "width": 120,
     "lockAspectRatio": true,
     "altText": "Company Logo"
@@ -242,6 +297,12 @@ Office.js mapping and notes:
 - At selection/range: `range.insertInlinePictureFromBase64(base64, location)`; at document: `context.document.body.insertInlinePictureFromBase64(base64, location)`.
 - Sizing: after insertion, set `pic.width`/`pic.height` if provided; if one dimension provided, maintain aspect ratio when `lockAspectRatio=true`.
 - Wrapping: Office.js inline pictures do not support floating wrap via this API; treat `wrapType` other than `inline` as `{ ok:false, code:"E_UNSUPPORTED" }` unless provider supports shapes.
+
+Authoring tips (NL → meta):
+- Say: "Insert logo from URL at cursor, width 120pt" →
+  {"type":"word.op","op":"insertPicture","version":"1.0","args":{"source":"url","data":"https://example.com/logo.png","location":"replace","width":120}}
+- Say: "Insert base64 image at end of document" →
+  {"type":"word.op","op":"insertPicture","version":"1.0","args":{"source":"base64","data":"<BASE64>","scope":"document","location":"end"}}
 
 
 ## table.* (table operations)
@@ -304,6 +365,16 @@ Office.js mapping and notes:
 - Merge cells: `table.getCell(startRow, startCol).merge(table.getCell(startRow+rowSpan-1, startCol+colSpan-1));` Note: merging support depends on requirement set.
 - Style: apply built-in names via `table.style = "TableGridLight"` (or other names). Banding flags as above.
 
+Authoring tips (NL → meta):
+- Say: "Create a 3x3 table with header at cursor" →
+  {"type":"word.op","op":"table.create","version":"1.0","args":{"rows":3,"cols":3,"header":true}}
+- Say: "Set row 0 col 0 to 'Title' for tableId:123" →
+  {"type":"word.op","op":"table.setCellText","version":"1.0","args":{"tableRef":"tableId:123","row":0,"col":0,"text":"Title"}}
+- Say: "Insert 2 rows after row 1 for tableId:123" →
+  {"type":"word.op","op":"table.insertRows","version":"1.0","args":{"tableRef":"tableId:123","at":1,"count":2}}
+- Say: "Merge a 2x2 area from (1,1) for tableId:123" →
+  {"type":"word.op","op":"table.mergeCells","version":"1.0","args":{"tableRef":"tableId:123","startRow":1,"startCol":1,"rowSpan":2,"colSpan":2}}
+
 
 ## applyStyle
 
@@ -355,6 +426,12 @@ Office.js mapping:
   - `number`: same as above but set numbering. If not supported, return `E_UNSUPPORTED`.
 - Clearing: if `clearOtherStyles=true`, remove direct formatting by reapplying `Normal` then re-apply specified overrides.
 
+Authoring tips (NL → meta):
+- Say: "Make selection bold, 12pt, dark gray, justified" →
+  {"type":"word.op","op":"applyStyle","version":"1.0","args":{"char":{"bold":true,"fontSize":12,"color":"#333333"},"para":{"alignment":"justify"}}}
+- Say: "Apply Heading 1 to selection" →
+  {"type":"word.op","op":"applyStyle","version":"1.0","args":{"namedStyle":"Heading 1"}}
+
 
 ## Mapping to `mcp_word__editTask`
 
@@ -371,6 +448,51 @@ Office.js mapping:
 - Graceful empty results: `search` with no hits should return `{ ok: true, data: { results: [] } }`.
 - External images: if a URL cannot be fetched, return `{ ok: false, code: "E_RUNTIME" }` with diagnostics.
 - Versioning: include `version` in payloads; add-in may use it for compatibility.
+
+
+## Office.js API Used
+
+- Core batching
+  - `Word.run(handler)`
+  - `context.sync()`
+
+- Document, body, selection
+  - `context.document.getSelection()`
+  - `context.document.body.getRange()`
+  - `context.document.body.insertText(text, Word.InsertLocation)`
+  - `context.document.body.insertParagraph(text, Word.InsertLocation)`
+  - `context.document.body.search(query, options)`
+  - `context.document.body.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
+  - `context.document.body.insertTable(rows, cols, Word.InsertLocation, data?)`
+
+- Range
+  - `range.insertText(text, Word.InsertLocation)`
+  - `range.insertParagraph(text, Word.InsertLocation)`
+  - `range.search(query, options)`
+  - `range.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
+  - `range.insertTable(rows, cols, Word.InsertLocation, data?)`
+  - `range.load(props)`
+  - `range.track()` / `range.untrack()`
+  - `range.style` (property)
+  - `range.font.bold | italic | underline | fontSize | color | highlightColor` (properties)
+  - `range.paragraphFormat.alignment | lineSpacing | spaceBefore | spaceAfter` (properties)
+  - `range.paragraphs` (collection)
+
+- Tables
+  - `table.addRows(Word.InsertLocation, count)`
+  - `table.addColumns(Word.InsertLocation, count)`
+  - `table.rows.getItemAt(index)` / `table.columns.getItemAt(index)`
+  - `table.rows.getItemAt(i).delete()` / `table.columns.getItemAt(i).delete()`
+  - `table.getCell(row, col)`
+  - `tableCell.insertText(text, Word.InsertLocation)`
+  - `tableCell.merge(targetCell)`
+  - `table.headerRow` (property)
+  - `table.bandedRows | bandedColumns | firstColumn | lastColumn | totalRow` (properties)
+  - `table.style` (property)
+
+- Enums and options
+  - `Word.InsertLocation` (`Start | End | Before | After | Replace`)
+  - `Word.SearchOptions` fields: `matchCase`, `matchWholeWord`, `matchPrefix`, `matchWildcards`
 
 
 ## Types (suggested TypeScript for validation)
