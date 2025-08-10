@@ -56,9 +56,6 @@ function log(...args) {
     .join(" ")}`;
   // IMPORTANT: write logs to stderr to keep stdout clean for MCP stdio
   console.error(line);
-  if (DEBUG) {
-    fs.appendFile(debugLogPath, line + "\n", () => {});
-  }
 }
 function logErr(err, ctx = "error") {
   const msg =
@@ -68,13 +65,6 @@ function logErr(err, ctx = "error") {
       ? err
       : JSON.stringify(err);
   console.error(`[${new Date().toISOString()}] ${ctx}: ${msg}`);
-  if (DEBUG) {
-    fs.appendFile(
-      debugLogPath,
-      `[${new Date().toISOString()}] ${ctx}: ${msg}\n`,
-      () => {}
-    );
-  }
 }
 
 // ---------- HTTPS + Socket.IO ----------
@@ -127,8 +117,8 @@ io.on("connection", (socket) => {
   try {
     socket.onAny((event, payload) => {
       try {
-        // Record the raw JSON received from socket clients
-        if (DEBUG) fs.appendFile(debugLogPath, `[socket:recv] ${event} ${JSON.stringify(payload || {})}\n`, () => {});
+        // Keep stderr visibility in debug, but avoid writing to debug.log
+        if (DEBUG) console.error(`[socket:recv] ${event} ${JSON.stringify(payload || {})}`);
       } catch {}
     });
   } catch {}
@@ -156,60 +146,31 @@ async function main() {
     });
   });
 
-  // In debug mode, observe raw STDIN to help debug MCP frames
+  // In debug mode, simply dump raw STDIN bytes to debug.log (no frame parsing)
+  let debugLogStream = null;
   if (DEBUG) {
     try {
-      let buf = Buffer.alloc(0);
+      debugLogStream = fs.createWriteStream(debugLogPath, { flags: "a" });
       process.stdin.on("data", (chunk) => {
-        const s = chunk.toString("utf8");
-        console.error(`[DEBUG stdin] ${s.slice(0, 1000).replace(/\n/g, "\\n")}${
-          s.length > 1000 ? "..." : ""
-        }`);
+        try {
+          debugLogStream.write(chunk);
+        } catch {}
+      });
 
-        // Minimal MCP frame parser for tests
-        buf = Buffer.concat([buf, chunk]);
-        while (true) {
-          const headerEnd = buf.indexOf("\r\n\r\n");
-          if (headerEnd === -1) break;
-          const header = buf.subarray(0, headerEnd).toString("utf8");
-          const m = /Content-Length:\s*(\d+)/i.exec(header);
-          if (!m) {
-            // drop invalid header
-            buf = buf.subarray(headerEnd + 4);
-            continue;
-          }
-          const len = Number(m[1] || 0);
-          const total = headerEnd + 4 + len;
-          if (buf.length < total) break; // wait for more
-          const body = buf.subarray(headerEnd + 4, total).toString("utf8");
-          // Advance buffer
-          buf = buf.subarray(total);
+      // Tee STDOUT to debug.log without altering MCP output
+      try {
+        const originalWrite = process.stdout.write.bind(process.stdout);
+        process.stdout.write = function (chunk, encoding, cb) {
           try {
-            const obj = JSON.parse(body);
-            if (obj && obj.method === "tools/call" && obj?.params?.name) {
-              const toolName = obj.params.name;
-              const args = obj.params.arguments || {};
-              try {
-                if (DEBUG) fs.appendFile(debugLogPath, `[socket:send] ${toolName} ${JSON.stringify(args)}\n`, () => {});
-              } catch {}
-              // fire-and-forget; forward JSON object on event named by tool
-              try { io.emit(toolName, args); } catch {}
+            if (debugLogStream) {
+              // Preserve encoding when provided for string writes
+              const enc = typeof encoding === "string" ? encoding : undefined;
+              debugLogStream.write(chunk, enc);
             }
           } catch {}
-        }
-      });
-    } catch {}
-
-    // Tee STDOUT frames to debug.log without altering MCP output
-    try {
-      const originalWrite = process.stdout.write.bind(process.stdout);
-      process.stdout.write = function(chunk, encoding, cb) {
-        try {
-          const data = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk ?? "");
-          fs.appendFile(debugLogPath, `[DEBUG stdout] ${data}\n`, () => {});
-        } catch {}
-        return originalWrite(chunk, encoding, cb);
-      };
+          return originalWrite(chunk, encoding, cb);
+        };
+      } catch {}
     } catch {}
   }
 
@@ -228,6 +189,9 @@ async function main() {
       server.close(() => log("HTTPS server closed"));
       if (io && io.close) io.close();
       if (transport && transport.close) await transport.close();
+      if (debugLogStream) {
+        try { debugLogStream.end(); } catch {}
+      }
     } catch (e) {
       logErr(e, "shutdown");
     } finally {

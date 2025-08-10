@@ -60,7 +60,7 @@ flowchart LR
 
 ## 6. Debugging
 - add argument --debug, dump detail and error in debug.log 
-- Record stdio stream into debug.log
+- Record stdio stream input / output into debug.log
 - Add a pipe after stdin and a pipe before stdout to record and forward if debug
 - Record json string before send socket and after receive socket in debug.log
 
