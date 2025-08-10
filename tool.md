@@ -21,6 +21,7 @@ Defines the MCP server tool interface and the canonical payloads for common Micr
   - table.applyStyle → `word:table.applyStyle`
   - applyStyle → `word:applyStyle`
   - listStyles → `word:listStyles`
+  - paragraphs.index → `word:paragraphs.index`
 
 
 ## Conventions
@@ -57,6 +58,7 @@ Range identity management (add-in guidance): when returning a `rangeId`, call `r
 - table.applyStyle
 - applyStyle
 - listStyles
+- paragraphs.index
 
 ## MCP Tools (detailed)
 
@@ -454,6 +456,78 @@ Suggested response shape (extended):
 ```
 
 
+<a id="op-paragraphs.index"></a>
+## paragraphs.index
+
+Purpose: enumerate paragraphs within a scope; optionally ensure each paragraph is wrapped in a content control and return stable identifiers for later targeting.
+
+Socket.IO event: `word:paragraphs.index`
+
+Args:
+- scope (`document | selection | rangeId:<id>`, default `document`)
+- ensureContentControls (boolean, default `true`) — when true, create a content control per paragraph if missing.
+- tagPrefix (string, default `"para"`) — applied to each created/normalized content control tag, e.g., `para:0`, `para:1`, ...
+- includeText (boolean, default `true`) — include plain text of each paragraph in response.
+- includeEmpty (boolean, default `false`) — include empty paragraphs.
+- max (number, optional) — cap the number of returned items.
+
+Returns:
+- `items`: `[ { index: number, rangeId: string, contentControlId?: number, tag?: string, text?: string } ]`
+- `total`: number — total paragraphs in scope (pre-cap)
+
+Example args (MCP tool):
+```json
+{ "scope": "document", "ensureContentControls": true, "tagPrefix": "para", "includeText": true }
+```
+
+Example response shape:
+```json
+{
+  "ok": true,
+  "op": "paragraphs.index",
+  "data": {
+    "total": 42,
+    "items": [
+      { "index": 0, "rangeId": "range-abc", "contentControlId": 101, "tag": "para:0", "text": "Title" },
+      { "index": 1, "rangeId": "range-def", "contentControlId": 102, "tag": "para:1", "text": "Introduction ..." }
+    ]
+  }
+}
+```
+
+Office.js mapping and notes:
+- Resolve target range by `scope`:
+  - `document` → `const target = context.document.body;`
+  - `selection` → `const target = context.document.getSelection();`
+  - `rangeId:<id>` → look up tracked `Word.Range` by id.
+- Enumerate paragraphs: `const paras = target.paragraphs; paras.load(["text", "items"]); await context.sync();`
+- For each paragraph `p` (respecting `includeEmpty` and `max`):
+  - Get its range: `const r = p.getRange();`
+  - Determine existing content control:
+    - Preferred: `const parent = r.parentContentControl` (or `p.parentContentControl` where available).
+    - Fallback: `const ccColl = context.document.contentControls.getByRange(r);`
+  - If `ensureContentControls=true` and none found:
+    - `const cc = p.insertContentControl();`
+    - Set metadata: `cc.tag = \`${tagPrefix}:${index}\`; cc.title = \`Paragraph ${index}\`;` (optionally set `cc.appearance = "boundingBox"`).
+  - Track the range to return a `rangeId` (use the same tracking guidance as elsewhere in this spec: `range.track()` and store an opaque id).
+  - Collect:
+    - `index` — paragraph ordinal within the enumerated scope
+    - `rangeId` — tracked id
+    - `contentControlId` — `cc.id` when present
+    - `tag` — `cc.tag` when present
+    - `text` — when `includeText=true`, from `p.text`
+- Notes:
+  - `contentControl.id` is unique per document session; `tag` provides a human-readable, stable label. Providers may prefer `tag` for persistence.
+  - Protected documents may block insertion of content controls; return `{ ok:false, code:"E_PERMISSION" }`.
+  - Paragraph collections may include empty paragraphs; control via `includeEmpty`.
+
+Authoring tips (NL → args):
+- Say: "List all paragraphs and assign ids" →
+  `{"ensureContentControls": true, "includeText": true}`
+- Say: "Index paragraphs in selection only (no text)" →
+  `{"scope":"selection","includeText":false}`
+
+
 ## Office.js API Used
 
 - Core batching
@@ -483,6 +557,11 @@ Suggested response shape (extended):
   - `range.font.bold | italic | underline | fontSize | color | highlightColor` (properties)
   - `range.paragraphFormat.alignment | lineSpacing | spaceBefore | spaceAfter` (properties)
   - `range.paragraphs` (collection)
+  - `paragraphs` (collection)
+  - `paragraph.getRange()`
+  - `paragraph.insertContentControl()`
+  - `range.parentContentControl` (or `contentControls.getByRange(range)`)
+  - `contentControl.id | tag | title | appearance`
 
 - Tables
   - `table.addRows(Word.InsertLocation, count)`
@@ -593,6 +672,23 @@ export interface ApplyStyleArgs {
   };
   precedence?: "styleThenOverrides" | "overridesThenStyle";
   resetDirectFormatting?: boolean;
+}
+
+export interface ParagraphsIndexArgs {
+  scope?: Scope;
+  ensureContentControls?: boolean;
+  tagPrefix?: string;
+  includeText?: boolean;
+  includeEmpty?: boolean;
+  max?: number;
+}
+
+export interface ParagraphsIndexItem {
+  index: number;
+  rangeId: string;
+  contentControlId?: number;
+  tag?: string;
+  text?: string;
 }
 ```
 

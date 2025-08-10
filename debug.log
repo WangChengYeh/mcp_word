@@ -1,0 +1,13 @@
+Content-Length: 139
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"e2e-test","version":"0.0.1"}}}Content-Length: 66
+
+{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}Content-Length: 165
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"HelloFromTest-kjoz9v1qhb","action":"insert","target":"selection"}}}Content-Length: 139
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"e2e-test","version":"0.0.1"}}}Content-Length: 66
+
+{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}Content-Length: 166
+
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"editTask","arguments":{"content":"HelloFromTest-fv2fvxodagr","action":"insert","target":"selection"}}}
