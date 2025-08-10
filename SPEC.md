@@ -30,7 +30,6 @@ flowchart LR
 #### `manifest.xml`
 - Defines Add-in ID, version, provider name, display name, and description
 - Host: Document; Permissions: ReadWriteDocument
-- SourceLocation: `http://localhost:3000/taskpane.html`
 
 #### `taskpane.html`
 - Loads Office.js and the Socket.io client
@@ -85,7 +84,7 @@ The project README must include the following, in order:
 - Create a local dev certificate: OpenSSL commands to generate PEM and PFX.
 - Configure MCP client: Codex Client setup via `.codex/config.toml` (see 9.2).
 - Office add-in: two options:
-  - Sideload `public/manifest.xml` in Word (points to `https://localhost:3000/taskpane.html`).
+  - Sideload `public/manifest.xml` in Word (points to `public/taskpane.xml`).
   - Script Lab alternative: import snippets from https://gist.github.com/WangChengYeh/5b44e6ba1c99baae62ebc0783e1469da
 - Tools: document `editTask` (args and example frame) and `ping`.
 - Debugging: `--debug` behavior and `GET /healthz`.

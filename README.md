@@ -13,7 +13,7 @@ flowchart LR
 
 ## Components
 
-- MCP server (`server.js`): Uses `@modelcontextprotocol/sdk` with `StdioServerTransport`, bridges edits to Socket.IO clients, forwards JSON on tool-named events, serves `/taskpane.yaml` for Script Lab import.
+- MCP server (`server.js`): Uses `@modelcontextprotocol/sdk` with `StdioServerTransport`, bridges edits to Socket.IO clients
 - Tools (`tool.js`): Registers MCP tools (`editTask`, `ping`) and forwards tool arguments to Socket.IO on the tool event (e.g., `editTask`).
 - Office Add-in (public/): `manifest.xml`, `taskpane.html`, `taskpane.js` for receiving AI edit commands and applying them in Word via Office.js; `taskpane.yaml` for Script Lab import.
 
@@ -49,7 +49,6 @@ Tips:
 - Static files are served from `public/`.
 - Endpoints:
   - Health: `GET https://localhost:3000/healthz`
-  - Script Lab snippet: `GET https://localhost:3000/taskpane.yaml`
 
 ### Create a Local Dev Certificate
 
@@ -114,12 +113,12 @@ Two ways to connect Word to the server:
 
 1) Sideload manifest
 - Open Word → Add-ins → Sideload `public/manifest.xml`
-- Manifest points to `https://localhost:3000/taskpane.html`
+- Manifest points to `public/taskpane.html`
 - Ensure the same host/port and a trusted certificate
 
 2) Script Lab (alternative)
 - Option A (paste JS): Install Script Lab, create a new script and paste `public/taskpane.js`, and add library `https://cdn.socket.io/4.7.5/socket.io.min.js`.
-- Option B (import YAML): In Script Lab, import from `https://localhost:3000/taskpane.yaml` (served by the server). Adjust the server URL/port in the snippet if needed.
+- Option B (import YAML): In Script Lab, import from https://gist.github.com/WangChengYeh/5b44e6ba1c99baae62ebc0783e1469da
 
 ## Tools
 
