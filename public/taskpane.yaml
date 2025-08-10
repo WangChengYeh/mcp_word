@@ -8,8 +8,12 @@ libraries:
 script:
   language: JavaScript
   content: |
-    // Configure server via query param: ?server=https://localhost:3000
-    const SERVER_URL = new URLSearchParams(location.search).get('server') || 'https://localhost:3000';
+    // Configure via query params:
+    // - server: e.g., ?server=https://localhost:3000
+    // - tool:   event name to handle (default: editTask)
+    const params = new URLSearchParams(location.search);
+    const SERVER_URL = params.get('server') || 'https://localhost:3000';
+    const TOOL_EVENT = params.get('tool') || 'editTask';
 
     let socket;
     let isConnected = false;
@@ -49,10 +53,12 @@ script:
         updateStatus('Connection failed');
       });
 
-      // Listen for tool-named event
-      socket.on('editTask', (payload) => {
-        console.log('Received editTask:', payload);
-        handleEditTask(payload);
+      // Listen for the tool-named event (default: editTask)
+      socket.on(TOOL_EVENT, (payload) => {
+        console.log('Received', TOOL_EVENT, payload);
+        if (TOOL_EVENT === 'editTask') {
+          handleEditTask(payload);
+        }
       });
 
       // Basic heartbeat UI
@@ -152,7 +158,7 @@ template:
       <h3>MCP Word — Script Lab Client</h3>
       <div id="status">Initializing...</div>
       <div id="connection-indicator" style="width:10px;height:10px;border-radius:50%;display:inline-block;margin-top:6px;background:red;"></div>
-      <p>This page listens for <code>editTask</code> events from the MCP server and applies them in the current Word document.</p>
-      <p>Override server: append <code>?server=https://localhost:3000</code> to the snippet URL in Script Lab.</p>
+      <p>This page listens for tool events (default <code>editTask</code>) from the MCP server and applies them in the current Word document.</p>
+      <p>Override server/event with query params, e.g.: <code>?server=https://localhost:3000&tool=editTask</code>.</p>
       <p>Ensure your local HTTPS cert is trusted and the port matches the server.</p>
     </div>
