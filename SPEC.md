@@ -47,7 +47,7 @@ flowchart LR
 -- template: as taskpane.html
 -- libraries: add socket.io library
 ### upload to gist
--- package.json: "snippet": "gh gist edit 5b44e6ba1c99baae62ebc0783e1469da --add taskpane.yaml"
+-- package.json: "snippet": "cd public ; gh gist edit 5b44e6ba1c99baae62ebc0783e1469da --add taskpane.yaml"
 ## 4. Workflow
 1. install the MCP server: `npm install`
 2. stdio from Codex CLI or fake master, use unix pipeline to provide input
