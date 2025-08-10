@@ -3,42 +3,27 @@
 Defines the MCP server tool interface and the canonical payloads for common Microsoft Word operations, along with explicit mappings to Office.js (Word JavaScript API). Covered operations: insert text, get selection, search, replace, insert picture, table operations, and style application.
 
 
-## MCP Tool Definition
+## Quick Map
 
-- Tool name: `mcp_word__editTask` (event: `ai-cmd`)
-- Purpose: carry a structured Word operation via `meta` while keeping `action/content/target` for simple fallbacks.
+- MCP tools → Socket.IO events (emit)
+  - insertText → `word:insertText`
+  - getSelection → `word:getSelection`
+  - search → `word:search`
+  - replace → `word:replace`
+  - insertPicture → `word:insertPicture`
+  - table.create → `word:table.create`
+  - table.insertRows → `word:table.insertRows`
+  - table.insertColumns → `word:table.insertColumns`
+  - table.deleteRows → `word:table.deleteRows`
+  - table.deleteColumns → `word:table.deleteColumns`
+  - table.setCellText → `word:table.setCellText`
+  - table.mergeCells → `word:table.mergeCells`
+  - table.applyStyle → `word:table.applyStyle`
+  - applyStyle → `word:applyStyle`
+  - listStyles → `word:listStyles`
 
-Parameters:
-- `action` (optional): `insert | replace | append` — legacy/simple text helper. For full control use `meta`.
-- `content` (required): short human-readable summary for UI/logging.
-- `meta` (optional but recommended): JSON string as defined in Common Envelope below.
-- `target` (optional): `cursor | selection | document` — for simple text ops; otherwise specify scope in `meta.args`.
-- `taskId` (optional): caller-provided correlation id.
 
-Response (suggested): JSON with `{ ok: boolean, op: string, data?: object, diagnostics?: { level: 'info'|'warn'|'error', msg: string }[] }`.
-
-
-## Common Envelope (meta)
-
-- Event: `ai-cmd`
-- Payload (embedded in `meta` as a JSON string):
-  ```json
-  {
-    "type": "word.op",
-    "op": "<operation>",
-    "args": { /* operation-specific */ },
-    "version": "1.0"
-  }
-  ```
-- Suggested response (returned by the add-in):
-  ```json
-  {
-    "ok": true,
-    "op": "<operation>",
-    "data": { /* result-specific */ },
-    "diagnostics": [ { "level": "info|warn|error", "msg": "..." } ]
-  }
-  ```
+## Conventions
 
 Conventions and types:
 - Encoding: UTF‑8 text.
@@ -54,53 +39,34 @@ Conventions and types:
 Range identity management (add-in guidance): when returning a `rangeId`, call `range.track()` and `context.trackedObjects.add(range)`, store it in an internal map keyed by a generated id, and return that id. On subsequent calls with `rangeId`, look up the tracked object; periodically untrack when no longer needed.
 
 
-## Meta JSON Quick Reference (for AI authors)
 
-Use these rules and templates to author `meta` JSON confidently.
+## MCP Tool Index
 
-- Required keys: `type` = `"word.op"`, `op` = one of the operations, `version` (e.g., `"1.0"`), and `args` object.
-- Scope defaults: omit `scope` to use `selection`. Use `"document"` for whole doc; use `"rangeId:<id>"` to target a saved range.
-- Location defaults: prefer `location`. If not set, providers treat text insert as `replace` at selection; aliases: `append -> end`, `prepend -> start`.
-- Keep it minimal: only include arguments you actually need; defaults cover the rest.
+- insertText
+- getSelection
+- search
+- replace
+- insertPicture
+- table.create
+- table.insertRows
+- table.insertColumns
+- table.deleteRows
+- table.deleteColumns
+- table.setCellText
+- table.mergeCells
+- table.applyStyle
+- applyStyle
+- listStyles
 
-Canonical template:
-```json
-{
-  "type": "word.op",
-  "op": "<insertText|getSelection|search|replace|insertPicture|table.*|applyStyle>",
-  "version": "1.0",
-  "args": { /* see per-op sections */ }
-}
-```
-
-Common field aliases the provider accepts:
-- `where` -> `location`
-- `insert` (when selection collapsed) -> `location: "replace"` (provider MAY map)
-- `append` -> `location: "end"`, `prepend` -> `location: "start"`
-- `tableId:<id>` or `rangeId:<id>` can be used in `tableRef`
-
-Validation guidance (what to expect on errors):
-- Missing required field: `{ ok:false, code:"E_INVALID_ARG", diagnostics:[{"msg":"<field> required"}] }`
-- Unsupported features (e.g., true regex search, picture wrap types): `{ ok:false, code:"E_UNSUPPORTED" }`
-- Not found (bad `rangeId`/`tableRef`): `{ ok:false, code:"E_NOT_FOUND" }`
+## MCP Tools (detailed)
 
 
-
-## Operation Index
-
-- insertText: insert or replace text
-- getSelection: get current selection text and range
-- search: find text/style matches
-- replace: replace text (first/all)
-- insertPicture: insert image from URL or base64
-- table.*: create and modify tables
-- applyStyle: apply character/paragraph styles
-- listStyles: list available named styles (paragraph/character/table)
-
-
+<a id="op-insertText"></a>
 ## insertText
 
 Purpose: insert or replace text at cursor, selection, document endpoints, or a saved range.
+
+Socket.IO event: `word:insertText`
 
 Args:
 - `text` (string, required)
@@ -111,18 +77,13 @@ Args:
 
 Returns: `{ rangeId: string, length: number }`
 
-Example `meta`:
+Example args (MCP tool):
 ```json
 {
-  "type": "word.op",
-  "op": "insertText",
-  "version": "1.0",
-  "args": {
-    "text": "Hello, Word!",
-    "scope": "selection",
-    "location": "replace",
-    "newParagraph": false
-  }
+  "text": "Hello, Word!",
+  "scope": "selection",
+  "location": "replace",
+  "newParagraph": false
 }
 ```
 
@@ -143,18 +104,21 @@ Office.js mapping:
   });
   ```
 
-Authoring tips (NL → meta):
+Authoring tips (NL → args):
 - Say: "Insert 'Hello' at the start of the document" →
-  {"type":"word.op","op":"insertText","version":"1.0","args":{"text":"Hello","scope":"document","location":"start"}}
+  {"text":"Hello","scope":"document","location":"start"}
 - Say: "Replace current selection with 'OK'" →
-  {"type":"word.op","op":"insertText","version":"1.0","args":{"text":"OK","location":"replace"}}
+  {"text":"OK","location":"replace"}
 - Say: "Append a new paragraph 'Thanks'" →
-  {"type":"word.op","op":"insertText","version":"1.0","args":{"text":"Thanks","scope":"document","location":"end","newParagraph":true}}
+  {"text":"Thanks","scope":"document","location":"end","newParagraph":true}
 
 
+<a id="op-getSelection"></a>
 ## getSelection
 
 Purpose: return the current selection’s plain text and range information.
+
+Socket.IO event: `word:getSelection`
 
 Returns:
 - `text` (string)
@@ -162,22 +126,22 @@ Returns:
 - `start` (number, optional document-relative)
 - `end` (number, optional)
 
-Example `meta`:
-```json
-{ "type": "word.op", "op": "getSelection", "version": "1.0", "args": {} }
-```
+Example args (MCP tool): `{}`
 
 Office.js mapping:
 - `const sel = context.document.getSelection(); sel.load(["text", "start", "end"]); await context.sync();`
 - Return `{ text: sel.text, rangeId: <tracked id>, start?, end? }`. Track the range and return an id.
 
 Authoring tip:
-- Say: "Get current selection" → {"type":"word.op","op":"getSelection","version":"1.0","args":{}}
+- Say: "Get current selection" → `{}`
 
 
+<a id="op-search"></a>
 ## search
 
 Purpose: search within a scope for text or by style-like constraints.
+
+Socket.IO event: `word:search`
 
 Args:
 - `query` (string; note: Office.js supports wildcards, not general regex)
@@ -194,19 +158,9 @@ Args:
 Returns:
 - `results`: `[ { rangeId, text, context?: string, start?: number, end?: number } ]`
 
-Example:
+Example args (MCP tool):
 ```json
-{
-  "type": "word.op",
-  "op": "search",
-  "version": "1.0",
-  "args": {
-    "query": "Invoice",
-    "scope": "document",
-    "matchWholeWord": true,
-    "maxResults": 50
-  }
-}
+{ "query": "Invoice", "scope": "document", "matchWholeWord": true, "maxResults": 50 }
 ```
 
 Office.js mapping and notes:
@@ -215,16 +169,19 @@ Office.js mapping and notes:
 - Load results: `results.load(["text"]); await context.sync();` Then track each `Range` and return `rangeId`s.
  - Word.SearchOptions also supports `matchSuffix`, `ignoreSpace`, `ignorePunct`.
 
-Authoring tips (NL → meta):
+Authoring tips (NL → args):
 - Say: "Find all 'Invoice' (whole word)" →
-  {"type":"word.op","op":"search","version":"1.0","args":{"query":"Invoice","matchWholeWord":true}}
+  {"query":"Invoice","matchWholeWord":true}
 - Say: "Case-sensitive search for 'Total' in selection" →
-  {"type":"word.op","op":"search","version":"1.0","args":{"query":"Total","scope":"selection","matchCase":true}}
+  {"query":"Total","scope":"selection","matchCase":true}
 
 
+<a id="op-replace"></a>
 ## replace
 
 Purpose: conditional replacement based on a query or an explicit target range.
+
+Socket.IO event: `word:replace`
 
 Args:
 - `target` (`document | selection | rangeId:<id> | searchQuery`)
@@ -235,20 +192,9 @@ Args:
 
 Returns: `{ replaced: number }`
 
-Example:
+Example args (MCP tool):
 ```json
-{
-  "type": "word.op",
-  "op": "replace",
-  "version": "1.0",
-  "args": {
-    "target": "searchQuery",
-    "query": "2024",
-    "matchWholeWord": true,
-    "replaceWith": "2025",
-    "mode": "replaceAll"
-  }
-}
+{ "target": "searchQuery", "query": "2024", "matchWholeWord": true, "replaceWith": "2025", "mode": "replaceAll" }
 ```
 
 Office.js mapping:
@@ -256,16 +202,19 @@ Office.js mapping:
 - For each range: `range.insertText(replaceWith, Word.InsertLocation.replace)`.
 - Count successful replacements; return `{ replaced }`.
 
-Authoring tips (NL → meta):
+Authoring tips (NL → args):
 - Say: "Replace all 2024 with 2025 in the document" →
-  {"type":"word.op","op":"replace","version":"1.0","args":{"target":"searchQuery","query":"2024","replaceWith":"2025","mode":"replaceAll"}}
+  {"target":"searchQuery","query":"2024","replaceWith":"2025","mode":"replaceAll"}
 - Say: "Replace the first match of 'foo' with 'bar' in the selection" →
-  {"type":"word.op","op":"replace","version":"1.0","args":{"target":"searchQuery","query":"foo","replaceWith":"bar","mode":"replaceFirst","scope":"selection"}}
+  {"target":"searchQuery","query":"foo","replaceWith":"bar","mode":"replaceFirst","scope":"selection"}
 
 
+<a id="op-insertPicture"></a>
 ## insertPicture
 
 Purpose: insert an image from URL or base64.
+
+Socket.IO event: `word:insertPicture`
 
 Args:
 - `source` (`url | base64`)
@@ -280,21 +229,9 @@ Args:
 
 Returns: `{ shapeId?: string, rangeId: string }`
 
-Example:
+Example args (MCP tool):
 ```json
-{
-  "type": "word.op",
-  "op": "insertPicture",
-  "version": "1.0",
-  "args": {
-    "source": "url",
-    "data": "https://example.com/logo.png",
-    "location": "replace",
-    "width": 120,
-    "lockAspectRatio": true,
-    "altText": "Company Logo"
-  }
-}
+{ "source": "url", "data": "https://example.com/logo.png", "location": "replace", "width": 120, "lockAspectRatio": true, "altText": "Company Logo" }
 ```
 
 Office.js mapping and notes:
@@ -304,22 +241,33 @@ Office.js mapping and notes:
 - Wrapping: Office.js inline pictures do not support floating wrap via this API; treat `wrapType` other than `inline` as `{ ok:false, code:"E_UNSUPPORTED" }` unless provider supports shapes.
  - Alt text: map `altText` to `inlinePicture.altTextDescription` (and optionally `altTextTitle`).
 
-Authoring tips (NL → meta):
+Authoring tips (NL → args):
 - Say: "Insert logo from URL at cursor, width 120pt" →
-  {"type":"word.op","op":"insertPicture","version":"1.0","args":{"source":"url","data":"https://example.com/logo.png","location":"replace","width":120}}
+  {"source":"url","data":"https://example.com/logo.png","location":"replace","width":120}
 - Say: "Insert base64 image at end of document" →
-  {"type":"word.op","op":"insertPicture","version":"1.0","args":{"source":"base64","data":"<BASE64>","scope":"document","location":"end"}}
+  {"source":"base64","data":"<BASE64>","scope":"document","location":"end"}
 
 
+<a id="op-table"></a>
 ## table.* (table operations)
 
 Use `op: "table.<subop>"`. Common sub-operations:
+
+Socket.IO events:
+- `word:table.create`
+- `word:table.insertRows`
+- `word:table.insertColumns`
+- `word:table.deleteRows`
+- `word:table.deleteColumns`
+- `word:table.setCellText`
+- `word:table.mergeCells`
+- `word:table.applyStyle`
 
 1) `table.create`
 - Args:
   - `rows` (number, required)
   - `cols` (number, required)
-  - `scope` / `where` (same as insertText; default insert at selection)
+  - `scope` / `location` (same as insertText; default insert at selection)
   - `data` (string[][], optional initial cell values)
   - `header` (boolean; treat first row as header)
 - Returns: `{ tableId: string, rangeId: string }`
@@ -344,22 +292,12 @@ Use `op: "table.<subop>"`. Common sub-operations:
   - `tableRef`
   - `style`: `BuiltinName | { bandedRows?: boolean, bandedColumns?: boolean, firstRow?: boolean, lastRow?: boolean, firstColumn?: boolean, lastColumn?: boolean }`
 
-Example (create 3x3 and fill one cell):
+Example args (create 3x3 and fill one cell):
 ```json
-{
-  "type": "word.op",
-  "op": "table.create",
-  "version": "1.0",
-  "args": { "rows": 3, "cols": 3, "header": true }
-}
+{ "rows": 3, "cols": 3, "header": true }
 ```
 ```json
-{
-  "type": "word.op",
-  "op": "table.setCellText",
-  "version": "1.0",
-  "args": { "tableRef": "tableId:...", "row": 0, "col": 0, "text": "Title" }
-}
+{ "tableRef": "tableId:...", "row": 0, "col": 0, "text": "Title" }
 ```
 
 Office.js mapping and notes:
@@ -371,20 +309,23 @@ Office.js mapping and notes:
 - Merge cells: `table.getCell(startRow, startCol).merge(table.getCell(startRow+rowSpan-1, startCol+colSpan-1));` Note: merging support depends on requirement set.
 - Style: apply built-in names via `table.style = "TableGridLight"` (or other names). Banding flags as above.
 
-Authoring tips (NL → meta):
+Authoring tips (NL → args):
 - Say: "Create a 3x3 table with header at cursor" →
-  {"type":"word.op","op":"table.create","version":"1.0","args":{"rows":3,"cols":3,"header":true}}
+  {"rows":3,"cols":3,"header":true}
 - Say: "Set row 0 col 0 to 'Title' for tableId:123" →
-  {"type":"word.op","op":"table.setCellText","version":"1.0","args":{"tableRef":"tableId:123","row":0,"col":0,"text":"Title"}}
+  {"tableRef":"tableId:123","row":0,"col":0,"text":"Title"}
 - Say: "Insert 2 rows after row 1 for tableId:123" →
-  {"type":"word.op","op":"table.insertRows","version":"1.0","args":{"tableRef":"tableId:123","at":1,"count":2}}
+  {"tableRef":"tableId:123","at":1,"count":2}
 - Say: "Merge a 2x2 area from (1,1) for tableId:123" →
-  {"type":"word.op","op":"table.mergeCells","version":"1.0","args":{"tableRef":"tableId:123","startRow":1,"startCol":1,"rowSpan":2,"colSpan":2}}
+  {"tableRef":"tableId:123","startRow":1,"startCol":1,"rowSpan":2,"colSpan":2}
 
 
+<a id="op-applyStyle"></a>
 ## applyStyle
 
 Purpose: apply named styles (Heading, Quote, etc.) and/or direct formatting (font size, bold, alignment) to a target range.
+
+Socket.IO event: `word:applyStyle`
 
 Key principles
 - Named styles set baseline formatting on paragraphs or character runs. Direct formatting then overrides the baseline.
@@ -421,19 +362,14 @@ Args:
 
 Returns: `{ rangeId: string }`
 
-Example:
+Example args (MCP tool):
 ```json
 {
-  "type": "word.op",
-  "op": "applyStyle",
-  "version": "1.0",
-  "args": {
-    "scope": "selection",
-    "namedStyle": "Heading 1",
-    "para": { "alignment": "justify", "lineSpacing": 1.15, "firstLineIndent": 18 },
-    "char": { "bold": true, "fontSize": 14, "color": "#333333" },
-    "precedence": "styleThenOverrides"
-  }
+  "scope": "selection",
+  "namedStyle": "Heading 1",
+  "para": { "alignment": "justify", "lineSpacing": 1.15, "firstLineIndent": 18 },
+  "char": { "bold": true, "fontSize": 14, "color": "#333333" },
+  "precedence": "styleThenOverrides"
 }
 ```
 
@@ -447,33 +383,36 @@ Office.js mapping:
   - `number`: similar approach for numbered lists. If API not available, return `E_UNSUPPORTED`.
 - Clearing: if `clearOtherStyles=true`, remove direct formatting by reapplying `Normal` then re-apply specified overrides.
 
-Authoring tips (NL → meta):
+Authoring tips (NL → args):
 - Say: "Make selection bold, 12pt, dark gray, justified" →
-  {"type":"word.op","op":"applyStyle","version":"1.0","args":{"char":{"bold":true,"fontSize":12,"color":"#333333"},"para":{"alignment":"justify"}}}
+  {"char":{"bold":true,"fontSize":12,"color":"#333333"},"para":{"alignment":"justify"}}
 - Say: "Apply Heading 1 to selection" →
-  {"type":"word.op","op":"applyStyle","version":"1.0","args":{"namedStyle":"Heading 1"}}
+  {"namedStyle":"Heading 1"}
 
 
-## Mapping to `mcp_word__editTask`
+## Compatibility: Aggregate Tool (optional)
 
-- `action`: `insert | replace | append` for basic text; providers MAY ignore when `meta` is supplied.
-- `content`: short description (e.g., "Replace selection with 'Hello'").
-- `meta`: JSON string per this spec (authoritative for operation and args).
-- `target`: kept for simple scenarios; for full fidelity, specify `scope` and `location` in `meta.args`.
+Some providers may prefer a single aggregate MCP tool (e.g., `editTask`) that emits one Socket.IO event carrying `{ op, args }` or a `meta` string with the same structure. When adopting this pattern:
+- Event name: choose a single event like `editTask`, or forward the `op` directly as event name `word:<op>`.
+- Envelope shape (JSON): `{ type: "word.op", op: "<name>", args: { ... }, version: "1.0" }`.
+- Map each `<name>` to the per-tool sections above and execute the same Office.js calls.
 
 
 ## Best Practices
 
-- Small steps: split complex flows into multiple `ai-cmd` calls; pass back `rangeId` / `tableId` for chaining.
+- Small steps: split complex flows into multiple Socket.IO emits (e.g., `word:insertText`, `word:applyStyle`); pass back `rangeId` / `tableId` for chaining.
 - Stable targeting: prefer `rangeId` to avoid cursor movement races.
 - Graceful empty results: `search` with no hits should return `{ ok: true, data: { results: [] } }`.
 - External images: if a URL cannot be fetched, return `{ ok: false, code: "E_RUNTIME" }` with diagnostics.
 - Versioning: include `version` in payloads; add-in may use it for compatibility.
 
 
+<a id="op-listStyles"></a>
 ## listStyles
 
 Purpose: provide a list of style names that can be used with `applyStyle` and `table.applyStyle`. Use this to power style pickers or validate style names.
+
+Socket.IO event: `word:listStyles`
 
 Args:
 - `category` (`paragraph | character | table | all`, default `all`)
@@ -491,10 +430,7 @@ Returns:
 }
 ```
 
-Example `meta`:
-```json
-{ "type": "word.op", "op": "listStyles", "version": "1.0", "args": { "category": "paragraph" } }
-```
+Example args (MCP tool): `{ "category": "paragraph" }`
 
 Office.js mapping and notes:
 - Word JavaScript API does not currently expose a direct enumeration of all styles. Providers SHOULD:
@@ -533,13 +469,11 @@ Suggested response shape (extended):
   - `context.document.body.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
   - `context.document.body.insertTable(rows, cols, Word.InsertLocation, data?)`
   - `context.document.body.getOoxml()` (optional: advanced providers may inspect OOXML)
-  - `context.document.body.getOoxml()` (optional: advanced providers may inspect OOXML)
 
 - Range
   - `range.insertText(text, Word.InsertLocation)`
   - `range.insertParagraph(text, Word.InsertLocation)`
   - `range.search(query, options)`
-  - `range.getOoxml()` (optional)
   - `range.insertInlinePictureFromBase64(base64, Word.InsertLocation)`
   - `range.insertTable(rows, cols, Word.InsertLocation, data?)`
   - `range.getOoxml()` (optional)
@@ -573,6 +507,7 @@ Suggested response shape (extended):
 export type Scope = "document" | "selection" | `rangeId:${string}`;
 export type Location = "start" | "end" | "before" | "after" | "replace";
 
+// Optional (only if you implement the aggregate tool pattern)
 export interface Envelope<T = unknown> {
   type: "word.op";
   op: "insertText" | "getSelection" | "search" | "replace" | "insertPicture" | `table.${string}` | "applyStyle";
@@ -662,22 +597,13 @@ export interface ApplyStyleArgs {
 ```
 
 
-## Minimal Integration Example (caller side)
+## Minimal Integration Example (Socket.IO + MCP)
 
-- `content`: human text like "Replace current selection with 'Hello, Word!'".
-- `meta`:
-```json
-{
-  "type": "word.op",
-  "op": "insertText",
-  "version": "1.0",
-  "args": { "text": "Hello, Word!", "scope": "selection", "location": "replace" }
-}
-```
-- `target`: `selection`
+- MCP tool call: `insertText` with args `{ "text": "Hello, Word!", "scope": "selection", "location": "replace" }`.
+- Socket.IO emit: server/provider emits `word:insertText` with the same args.
+- Add-in handling outline:
+  1) Receive event `word:insertText` with args.
+  2) Execute Office.js: `context.document.getSelection().insertText(args.text, Word.InsertLocation.replace); await context.sync();`
+  3) Return `{ ok: true, data: { rangeId, length } }`.
 
-Add-in handling outline:
-1) Parse the `meta` JSON.
-2) Dispatch by `op` to the appropriate handler.
-3) Execute Word API (Office.js) calls.
-4) Return a normalized response with `ok`, `data`, and optional `diagnostics`.
+Compatibility (optional, aggregate tool): implement an additional MCP tool that forwards a `meta` envelope and emits a single event carrying `{ op, args }` if you prefer a single entry point.
