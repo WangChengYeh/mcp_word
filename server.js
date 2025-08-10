@@ -28,7 +28,7 @@ const getFlagVal = (name, def) => {
 if (hasFlag("help")) {
   console.log(
     [
-      "Usage: node server.js [--port 3000] [--key key.pem --cert cert.pem] [--pfx bundle.pfx --passphrase XXX] [--debug]",
+      "Usage: node server.js [--port 3000] [--key key.pem --cert cert.pem] [--pfx bundle.pfx --passphrase XXX] [--debug] [--simple]",
       "",
       "Options:",
       "  --port   HTTPS Socket.IO listen port (default 3000)",
@@ -43,6 +43,7 @@ if (hasFlag("help")) {
 }
 const PORT = parseInt(getFlagVal("port", "3000"), 10);
 const DEBUG = hasFlag("debug");
+const SIMPLE = hasFlag("simple");
 const HTTPS_KEY = getFlagVal("key");
 const HTTPS_CERT = getFlagVal("cert");
 const HTTPS_PFX = getFlagVal("pfx");
@@ -133,8 +134,7 @@ const mcp = new McpServer({
   version: "1.0.0",
 });
 
-// Tools are defined in tool.js
-import { registerTools } from "./tool.js";
+// Tools are loaded dynamically (tool.js by default, tool_simple.js with --simple)
 
 // ---------- bootstrap ----------
 async function main() {
@@ -175,8 +175,19 @@ async function main() {
   }
 
   // Connect MCP STDIO
-  // Register tools (editTask & ping) BEFORE connecting transport
-  registerTools(mcp, io, log, logErr);
+  // Register tools BEFORE connecting transport (dynamic import based on --simple)
+  try {
+    const modulePath = SIMPLE ? "./tool_simple.js" : "./tool.js";
+    const mod = await import(modulePath);
+    if (!mod || typeof mod.registerTools !== "function") {
+      throw new Error(`registerTools not found in ${modulePath}`);
+    }
+    mod.registerTools(mcp, io, log, logErr);
+    log(`Tools registered from ${modulePath}`);
+  } catch (e) {
+    logErr(e, "tools");
+    process.exit(1);
+  }
 
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
