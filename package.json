@@ -8,9 +8,9 @@
     "start": "node server.js",
     "dev": "node server.js --debug",
     "test": "PORT=3100 bash ./test.sh",
-    "test:simple": "PORT=3100 SIMPLE=1 bash ./test_simple.sh",
+    "test:simple": "PORT=3100 bash ./test_simple.sh",
     "test:int": "PORT=3100 node test.js",
-    "test:int:simple": "PORT=3100 SIMPLE=1 node test_simple.js",
+    "test:int:simple": "PORT=3100 node test_simple.js",
     "snippet": "cd public ; gh gist edit 5b44e6ba1c99baae62ebc0783e1469da --add taskpane.yaml"
   },
   "dependencies": {
