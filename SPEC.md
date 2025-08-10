@@ -70,10 +70,12 @@ flowchart LR
 - socket: generate a test javascript as a socket client
 - before test, prepare package.json
 - default test port: 3100 (3000 reserved for normal use)
+- test_simple.sh to test server.js --simple
 ## 8. Integration Test
 - test.js Integration test: MCP client + MCP server (server.js)
 - MCP client: import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 - MCP client: list tools and call tools (e.g., ping, editTask)
+- test_simple.js to test server.js --simple
 ## 9. Documentation
 
 ### 9.1 README.md requirements (step-by-step)
