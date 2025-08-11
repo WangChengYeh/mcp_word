@@ -10,6 +10,7 @@ import path from "path";
 import process from "process";
 import { fileURLToPath } from "url";
 import { Transform, PassThrough } from "node:stream";
+import util from "node:util";
 // schemas and tool registration moved to tool.js
 
 // MCP SDK
@@ -56,6 +57,7 @@ const debugLogPath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "debug.log"
 );
+let debugLogStream = null; // initialized in main() when --debug is set
 function log(...args) {
   const line = `[${new Date().toISOString()}] ${args
     .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
@@ -153,12 +155,34 @@ async function main() {
 
   // Build stdio pipes: stdin -> inPipe -> MCP, MCP -> outPipe -> stdout
   // The in/out pipes optionally mirror traffic to debug.log
-  let debugLogStream = null;
   if (DEBUG) {
     try {
       debugLogStream = fs.createWriteStream(debugLogPath, { flags: "a" });
     } catch {}
   }
+
+  // Tee all console output to stderr and (if --debug) to debug.log
+  try {
+    const writeLine = (line) => {
+      try { process.stderr.write(String(line) + "\n"); } catch {}
+      if (debugLogStream) {
+        try { debugLogStream.write(String(line) + "\n"); } catch {}
+      }
+    };
+    const mkConsole = (orig) => (...args) => {
+      try {
+        const line = util.format(...args);
+        writeLine(line);
+      } catch {
+        // Fall back to original if formatting fails
+        try { orig(...args); } catch {}
+      }
+    };
+    console.log = mkConsole(console.log);
+    console.info = mkConsole(console.info);
+    console.warn = mkConsole(console.warn);
+    console.error = mkConsole(console.error);
+  } catch {}
 
   const inPipe = new Transform({
     transform(chunk, enc, cb) {

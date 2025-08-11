@@ -70,11 +70,11 @@ Purpose: insert or replace text at cursor, selection, document endpoints, or a s
 Socket.IO event: `word:insertText`
 
 Args:
-- `text` (string, required)
-- `scope` (`document | selection | rangeId:<id>`, default `selection`)
-- `location` (`start | end | before | after | replace`, default `replace`)
-- `newParagraph` (boolean, default `false`)
-- `keepFormatting` (boolean, default `true`) — provider MAY ignore; Word `insertText` inherits formatting by design.
+- `text` (string, required) — text content to insert.
+- `scope` (`document | selection | rangeId:<id>`, default `selection`) — where to target the insertion.
+- `location` (`start | end | before | after | replace`, default `replace`) — position relative to `scope`.
+- `newParagraph` (boolean, default `false`) — insert as a new paragraph when true.
+- `keepFormatting` (boolean, default `true`) — preserve surrounding formatting if possible (provider may ignore).
 
 Returns: `{ rangeId: string, length: number }`
 
@@ -145,16 +145,16 @@ Purpose: search within a scope for text or by style-like constraints.
 Socket.IO event: `word:search`
 
 Args:
-- `query` (string; note: Office.js supports wildcards, not general regex)
-- `scope` (`document | selection | rangeId:<id>`, default `document`)
-- `useRegex` (boolean, default `false`)
-- `matchCase` (boolean, default `false`)
-- `matchWholeWord` (boolean, default `false`)
-- `matchPrefix` (boolean, default `false`)
-- `matchSuffix` (boolean, default `false`)
-- `ignoreSpace` (boolean, default `false`)
-- `ignorePunct` (boolean, default `false`)
-- `maxResults` (number, default `100`)
+- `query` (string) — text to find (wildcards supported; regex usually not).
+- `scope` (`document | selection | rangeId:<id>`, default `document`) — where to search.
+- `useRegex` (boolean, default `false`) — treat `query` as regex (may be unsupported).
+- `matchCase` (boolean, default `false`) — match case exactly.
+- `matchWholeWord` (boolean, default `false`) — match whole words only.
+- `matchPrefix` (boolean, default `false`) — match at word starts.
+- `matchSuffix` (boolean, default `false`) — match at word ends.
+- `ignoreSpace` (boolean, default `false`) — ignore whitespace differences.
+- `ignorePunct` (boolean, default `false`) — ignore punctuation differences.
+- `maxResults` (number, default `100`) — maximum matches to return.
 
 Returns:
 - `results`: `[ { rangeId, text, context?: string, start?: number, end?: number } ]`
@@ -185,11 +185,14 @@ Purpose: conditional replacement based on a query or an explicit target range.
 Socket.IO event: `word:replace`
 
 Args:
-- `target` (`document | selection | rangeId:<id> | searchQuery`)
-- `query` (string; required when `target=searchQuery`)
-- `useRegex`, `matchCase`, `matchWholeWord`, `matchPrefix` (same as search)
-- `replaceWith` (string, required)
-- `mode` (`replaceFirst | replaceAll`, default `replaceAll`)
+- `target` (`document | selection | rangeId:<id> | searchQuery`) — what to replace: a scope, range, or search results.
+- `query` (string; required when `target=searchQuery`) — search text to match when using `searchQuery`.
+- `useRegex` (boolean, default `false`) — regex matching (may be unsupported).
+- `matchCase` (boolean, default `false`) — case-sensitive matching.
+- `matchWholeWord` (boolean, default `false`) — whole-word matching.
+- `matchPrefix` (boolean, default `false`) — prefix matching.
+- `replaceWith` (string, required) — replacement text.
+- `mode` (`replaceFirst | replaceAll`, default `replaceAll`) — replace first match or all matches.
 
 Returns: `{ replaced: number }`
 
@@ -218,15 +221,15 @@ Purpose: insert an image from URL or base64.
 Socket.IO event: `word:insertPicture`
 
 Args:
-- `source` (`url | base64`)
-- `data` (string; URL or base64)
-- `scope` (`document | selection | rangeId:<id>`, default `selection`)
-- `location` (`start | end | before | after | replace`, default `replace`)
-- `width` (number, pt; optional)
-- `height` (number, pt; optional)
-- `lockAspectRatio` (boolean, default `true`)
-- `altText` (string; optional)
-- `wrapType` (`inline | square | tight | behind | inFront`, default `inline`)
+- `source` (`url | base64`) — image input type.
+- `data` (string) — image URL or base64 string.
+- `scope` (`document | selection | rangeId:<id>`, default `selection`) — where to insert the image.
+- `location` (`start | end | before | after | replace`, default `replace`) — insert position relative to `scope`.
+- `width` (number, pt; optional) — desired image width.
+- `height` (number, pt; optional) — desired image height.
+- `lockAspectRatio` (boolean, default `true`) — keep width/height proportional.
+- `altText` (string; optional) — accessibility description.
+- `wrapType` (`inline | square | tight | behind | inFront`, default `inline`) — text wrapping preference.
 
 Returns: `{ shapeId?: string, rangeId: string }`
 
@@ -266,32 +269,49 @@ Socket.IO events:
 
 1) `table.create`
 - Args:
-  - `rows` (number, required)
-  - `cols` (number, required)
-  - `scope` / `location` (same as insertText; default insert at selection)
-  - `data` (string[][], optional initial cell values)
-  - `header` (boolean; treat first row as header)
+  - `rows` (number, required) — number of table rows.
+  - `cols` (number, required) — number of table columns.
+  - `scope` / `location` — where and how to insert the table.
+  - `data` (string[][], optional) — initial cell values by row/column.
+  - `header` (boolean) — treat first row as a header.
 - Returns: `{ tableId: string, rangeId: string }`
 
 2) `table.insertRows`
 - Args: `{ tableRef: "tableId:<id> | rangeId:<id>", at: number, count: number }`
+  - `tableRef` — table id or range pointing to a table.
+  - `at` — zero-based row index to insert relative to.
+  - `count` — number of rows to insert.
 
 3) `table.insertColumns`
 - Args: `{ tableRef, at: number, count: number }`
+  - `tableRef` — table id or range pointing to a table.
+  - `at` — zero-based column index to insert relative to.
+  - `count` — number of columns to insert.
 
 4) `table.deleteRows` / `table.deleteColumns`
 - Args: `{ tableRef, indexes: number[] }`
+  - `tableRef` — target table id or range.
+  - `indexes` — zero-based row/column indexes to delete.
 
 5) `table.setCellText`
 - Args: `{ tableRef, row: number, col: number, text: string }`
+  - `tableRef` — target table id or range.
+  - `row` — zero-based row index.
+  - `col` — zero-based column index.
+  - `text` — cell text content.
 
 6) `table.mergeCells`
 - Args: `{ tableRef, startRow, startCol, rowSpan, colSpan }`
+  - `tableRef` — target table id or range.
+  - `startRow` — starting row index (zero-based).
+  - `startCol` — starting column index (zero-based).
+  - `rowSpan` — number of rows to span.
+  - `colSpan` — number of columns to span.
 
 7) `table.applyStyle`
 - Args:
-  - `tableRef`
-  - `style`: `BuiltinName | { bandedRows?: boolean, bandedColumns?: boolean, firstRow?: boolean, lastRow?: boolean, firstColumn?: boolean, lastColumn?: boolean }`
+  - `tableRef` — target table id or range.
+  - `style` — built-in style name or banding/heading flags to apply.
 
 Example args (create 3x3 and fill one cell):
 ```json
@@ -333,33 +353,33 @@ Key principles
 - Recommended order: apply namedStyle first, then apply paragraph (`para`) and character (`char`) overrides.
 
 Args:
-- `scope` (`selection | document | rangeId:<id>`, default `selection`)
-- `namedStyle` (string; e.g., `Normal`, `Heading 1`, `Title`) — paragraph or character style; provider chooses the appropriate target based on style kind when known.
+- `scope` (`selection | document | rangeId:<id>`, default `selection`) — what range to format.
+- `namedStyle` (string; e.g., `Normal`, `Heading 1`, `Title`) — Word style name to apply.
 - `char` (direct character formatting overrides):
-  - `bold?` (boolean)
-  - `italic?` (boolean)
-  - `underline?` (`none | single | double`)
-  - `strikeThrough?` (boolean)
-  - `doubleStrikeThrough?` (boolean)
-  - `allCaps?` (boolean)
-  - `smallCaps?` (boolean)
-  - `superscript?` (boolean)
-  - `subscript?` (boolean)
-  - `fontName?` (string)
-  - `fontSize?` (number, pt)
-  - `color?` (string; text color)
-  - `highlight?` (string; text highlight color)
+  - `bold?` (boolean) — make text bold.
+  - `italic?` (boolean) — italicize text.
+  - `underline?` (`none | single | double`) — underline style.
+  - `strikeThrough?` (boolean) — apply single strikethrough.
+  - `doubleStrikeThrough?` (boolean) — apply double strikethrough.
+  - `allCaps?` (boolean) — render letters as uppercase.
+  - `smallCaps?` (boolean) — render letters as small caps.
+  - `superscript?` (boolean) — raise text above baseline.
+  - `subscript?` (boolean) — lower text below baseline.
+  - `fontName?` (string) — font family name.
+  - `fontSize?` (number, pt) — font size in points.
+  - `color?` (string) — text color (e.g., `#333333`).
+  - `highlight?` (string) — text highlight color.
 - `para` (direct paragraph formatting overrides):
-  - `alignment?` (`left | center | right | justify`)
-  - `lineSpacing?` (number, e.g., 1.15)
-  - `spaceBefore?` (number, pt)
-  - `spaceAfter?` (number, pt)
-  - `leftIndent?` (number, pt)
-  - `rightIndent?` (number, pt)
-  - `firstLineIndent?` (number, pt)
-  - `list?` (`none | bullet | number`)
-- `precedence` (`styleThenOverrides | overridesThenStyle`, default `styleThenOverrides`) — controls application order if both are provided.
-- `resetDirectFormatting` (boolean, default `false`) — when true, provider should clear existing direct formatting before applying settings (e.g., by reapplying `Normal` and then the desired `namedStyle`/overrides).
+  - `alignment?` (`left | center | right | justify`) — paragraph alignment.
+  - `lineSpacing?` (number, e.g., 1.15) — line spacing multiplier.
+  - `spaceBefore?` (number, pt) — space before paragraph.
+  - `spaceAfter?` (number, pt) — space after paragraph.
+  - `leftIndent?` (number, pt) — left indent size.
+  - `rightIndent?` (number, pt) — right indent size.
+  - `firstLineIndent?` (number, pt) — first-line indent size.
+  - `list?` (`none | bullet | number`) — list formatting type.
+- `precedence` (`styleThenOverrides | overridesThenStyle`, default `styleThenOverrides`) — order of applying style vs overrides.
+- `resetDirectFormatting` (boolean, default `false`) — clear existing direct formatting before applying.
 
 Returns: `{ rangeId: string }`
 
