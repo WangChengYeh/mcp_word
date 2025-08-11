@@ -5,7 +5,7 @@ import { z } from "zod";
 
 export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   // Allow fixed values or a rangeId:... reference
-  const Scope = z.union([z.enum(["document", "selection"]), z.string().regex(/^rangeId:.+/)]);
+  const Scope = z.enum(["document", "selection"]);
   const Location = z.enum(["start", "end", "before", "after", "replace"]);
 
   const emitTool = (event, args) => {
@@ -67,7 +67,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   reg(
     "replace",
     {
-      target: z.union([Scope, z.literal("searchQuery")]),
+      target: Scope,
       query: z.string().optional(),
       useRegex: z.boolean().optional(),
       matchCase: z.boolean().optional(),
@@ -75,7 +75,6 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
       matchPrefix: z.boolean().optional(),
       replaceWith: z.string(),
       mode: z.enum(["replaceFirst", "replaceAll"]).optional(),
-      scope: Scope.optional(),
     },
     "word:replace"
   );
@@ -98,19 +97,19 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   );
 
   // ---------- Tables ----------
-  const tableRef = z.union([z.string().regex(/^tableId:.+/), z.string().regex(/^rangeId:.+/)]);
+  const tableRef = z.enum(["tableId", "rangeId"]);
   reg(
-    "table.create",
+    "table_create",
     { rows: z.number(), cols: z.number(), scope: Scope.optional(), location: Location.optional(), data: z.array(z.array(z.string())).optional(), header: z.boolean().optional() },
     "word:table.create"
   );
-  reg("table.insertRows", { tableRef: tableRef, at: z.number(), count: z.number() }, "word:table.insertRows");
-  reg("table.insertColumns", { tableRef: tableRef, at: z.number(), count: z.number() }, "word:table.insertColumns");
-  reg("table.deleteRows", { tableRef: tableRef, indexes: z.array(z.number()) }, "word:table.deleteRows");
-  reg("table.deleteColumns", { tableRef: tableRef, indexes: z.array(z.number()) }, "word:table.deleteColumns");
-  reg("table.setCellText", { tableRef: tableRef, row: z.number(), col: z.number(), text: z.string() }, "word:table.setCellText");
+  reg("table_insertRows", { tableRef: tableRef, at: z.number(), count: z.number() }, "word:table.insertRows");
+  reg("table_insertColumns", { tableRef: tableRef, at: z.number(), count: z.number() }, "word:table.insertColumns");
+  reg("table_deleteRows", { tableRef: tableRef, indexes: z.array(z.number()) }, "word:table.deleteRows");
+  reg("table_deleteColumns", { tableRef: tableRef, indexes: z.array(z.number()) }, "word:table.deleteColumns");
+  reg("table_setCellText", { tableRef: tableRef, row: z.number(), col: z.number(), text: z.string() }, "word:table.setCellText");
   reg(
-    "table.mergeCells",
+    "table_mergeCells",
     { tableRef: tableRef, startRow: z.number(), startCol: z.number(), rowSpan: z.number(), colSpan: z.number() },
     "word:table.mergeCells"
   );

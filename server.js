@@ -51,7 +51,11 @@ const HTTPS_PFX = getFlagVal("pfx");
 const HTTPS_PASSPHRASE = getFlagVal("passphrase");
 
 // ---------- logger ----------
-const debugLogPath = path.join(process.cwd(), "debug.log");
+// Ensure debug.log is co-located with server.js, not CWD
+const debugLogPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "debug.log"
+);
 function log(...args) {
   const line = `[${new Date().toISOString()}] ${args
     .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
