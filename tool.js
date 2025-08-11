@@ -32,7 +32,8 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     io.emit(event, args || {});
   };
 
-  const reg = (name, schema, event, desc) => {
+  const reg = (name_in, schema, event, desc) => {
+    let name = name_in.replace('.','_')
     mcp.registerTool(
       name,
       {
@@ -141,7 +142,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
 
   // ---------- Tables ----------
   reg(
-    "table_create",
+    "table.create",
     {
       rows: z.number().describe("Number of table rows."),
       cols: z.number().describe("Number of table columns."),
@@ -157,7 +158,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     "Create a table at the target location."
   );
   reg(
-    "table_insertRows",
+    "table.insertRows",
     {
       tableRef: TableRef,
       at: z.number().describe("Zero-based row index to insert relative to."),
@@ -167,7 +168,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     "Insert rows into a table."
   );
   reg(
-    "table_insertColumns",
+    "table.insertColumns",
     {
       tableRef: TableRef,
       at: z.number().describe("Zero-based column index to insert relative to."),
@@ -177,19 +178,19 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     "Insert columns into a table."
   );
   reg(
-    "table_deleteRows",
+    "table.deleteRows",
     { tableRef: TableRef, indexes: z.array(z.number()).describe("Row indexes to delete.") },
     "word:table.deleteRows",
     "Delete rows by index."
   );
   reg(
-    "table_deleteColumns",
+    "table.deleteColumns",
     { tableRef: TableRef, indexes: z.array(z.number()).describe("Column indexes to delete.") },
     "word:table.deleteColumns",
     "Delete columns by index."
   );
   reg(
-    "table_setCellText",
+    "table.setCellText",
     {
       tableRef: TableRef,
       row: z.number().describe("Zero-based row index."),
@@ -200,7 +201,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     "Set text for a specific cell."
   );
   reg(
-    "table_mergeCells",
+    "table.mergeCells",
     {
       tableRef: TableRef,
       startRow: z.number().describe("Starting row index (zero-based)."),

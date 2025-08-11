@@ -2,6 +2,9 @@
 
 Defines the MCP server tool interface and the canonical payloads for common Microsoft Word operations, along with explicit mappings to Office.js (Word JavaScript API). Covered operations: insert text, get selection, search, replace, insert picture, table operations, and style application.
 
+## Guidelines
+- JSON Schema compliance: each tool `inputSchema` is a JSON Schema `object` with `properties` and explicit `required` (when applicable). Values follow the official MCP schema in `schema.json`.
+- Types and enums mirror what the server exposes. Defaults are informational for authors; clients should not rely on defaults being applied server-side unless stated.
 
 ## Quick Map
 
@@ -18,7 +21,6 @@ Defines the MCP server tool interface and the canonical payloads for common Micr
   - table.deleteColumns → `word:table.deleteColumns`
   - table.setCellText → `word:table.setCellText`
   - table.mergeCells → `word:table.mergeCells`
-  - table.applyStyle → `word:table.applyStyle`
   - applyStyle → `word:applyStyle`
   - listStyles → `word:listStyles`
 
@@ -54,10 +56,8 @@ Range identity management (add-in guidance): when returning a `rangeId`, call `r
 - table.deleteColumns
 - table.setCellText
 - table.mergeCells
-- table.applyStyle
 - applyStyle
 - listStyles
-- listParagraphs
 
 ## MCP Tools (detailed)
 
@@ -75,6 +75,36 @@ Args:
 - `location` (`start | end | before | after | replace`, default `replace`) — position relative to `scope`.
 - `newParagraph` (boolean, default `false`) — insert as a new paragraph when true.
 - `keepFormatting` (boolean, default `true`) — preserve surrounding formatting if possible (provider may ignore).
+
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "text": { "type": "string", "description": "Text content to insert." },
+    "scope": {
+      "anyOf": [
+        { "type": "string", "const": "document" },
+        { "type": "string", "const": "selection" },
+        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
+      ],
+      "description": "Where to insert (default: selection)",
+      "default": "selection"
+    },
+    "location": {
+      "type": "string",
+      "enum": ["start", "end", "before", "after", "replace"],
+      "description": "Position relative to scope (default: replace)",
+      "default": "replace"
+    },
+    "newParagraph": { "type": "boolean", "description": "Insert as a new paragraph when true." },
+    "keepFormatting": { "type": "boolean", "description": "Preserve surrounding formatting if possible." }
+  },
+  "required": ["text"],
+  "additionalProperties": false
+}
+```
 
 Returns: `{ rangeId: string, length: number }`
 
@@ -129,6 +159,16 @@ Returns:
 
 Example args (MCP tool): `{}`
 
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}
+```
+
 Office.js mapping:
 - `const sel = context.document.getSelection(); sel.load(["text", "start", "end"]); await context.sync();`
 - Return `{ text: sel.text, rangeId: <tracked id>, start?, end? }`. Track the range and return an id.
@@ -155,6 +195,36 @@ Args:
 - `ignoreSpace` (boolean, default `false`) — ignore whitespace differences.
 - `ignorePunct` (boolean, default `false`) — ignore punctuation differences.
 - `maxResults` (number, default `100`) — maximum matches to return.
+
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "query": { "type": "string", "description": "Text to find (wildcards supported)." },
+    "scope": {
+      "anyOf": [
+        { "type": "string", "const": "document" },
+        { "type": "string", "const": "selection" },
+        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
+      ],
+      "description": "Where to search (default: document)",
+      "default": "document"
+    },
+    "useRegex": { "type": "boolean", "description": "Treat query as regex (may be unsupported)." },
+    "matchCase": { "type": "boolean", "description": "Match case exactly." },
+    "matchWholeWord": { "type": "boolean", "description": "Match whole words only." },
+    "matchPrefix": { "type": "boolean", "description": "Match at word starts." },
+    "matchSuffix": { "type": "boolean", "description": "Match at word ends." },
+    "ignoreSpace": { "type": "boolean", "description": "Ignore whitespace differences." },
+    "ignorePunct": { "type": "boolean", "description": "Ignore punctuation differences." },
+    "maxResults": { "type": "number", "description": "Maximum results to return." }
+  },
+  "required": ["query"],
+  "additionalProperties": false
+}
+```
 
 Returns:
 - `results`: `[ { rangeId, text, context?: string, start?: number, end?: number } ]`
@@ -194,6 +264,37 @@ Args:
 - `replaceWith` (string, required) — replacement text.
 - `mode` (`replaceFirst | replaceAll`, default `replaceAll`) — replace first match or all matches.
 
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "target": {
+      "anyOf": [
+        { "type": "string", "const": "document" },
+        { "type": "string", "const": "selection" },
+        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." },
+        { "type": "string", "const": "searchQuery" }
+      ],
+      "description": "What to replace: a scope, rangeId, or 'searchQuery'."
+    },
+    "query": { "type": "string", "description": "Search text when target is 'searchQuery'." },
+    "useRegex": { "type": "boolean", "description": "Treat query as regex (may be unsupported)." },
+    "matchCase": { "type": "boolean", "description": "Case-sensitive matching." },
+    "matchWholeWord": { "type": "boolean", "description": "Whole-word matching." },
+    "matchPrefix": { "type": "boolean", "description": "Prefix matching." },
+    "matchSuffix": { "type": "boolean", "description": "Suffix matching." },
+    "ignoreSpace": { "type": "boolean", "description": "Ignore whitespace differences." },
+    "ignorePunct": { "type": "boolean", "description": "Ignore punctuation differences." },
+    "replaceWith": { "type": "string", "description": "Replacement text." },
+    "mode": { "type": "string", "enum": ["replaceFirst", "replaceAll"], "description": "Replace first match or all matches." }
+  },
+  "required": ["target", "replaceWith"],
+  "additionalProperties": false
+}
+```
+
 Returns: `{ replaced: number }`
 
 Example args (MCP tool):
@@ -231,6 +332,35 @@ Args:
 - `altText` (string; optional) — accessibility description.
 - `wrapType` (`inline | square | tight | behind | inFront`, default `inline`) — text wrapping preference.
 
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "source": { "type": "string", "enum": ["url", "base64"], "description": "Image input type." },
+    "data": { "type": "string", "description": "Image URL or base64 string." },
+    "scope": {
+      "anyOf": [
+        { "type": "string", "const": "document" },
+        { "type": "string", "const": "selection" },
+        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
+      ],
+      "description": "Where to insert the image.",
+      "default": "selection"
+    },
+    "location": { "type": "string", "enum": ["start", "end", "before", "after", "replace"], "description": "Insert position relative to scope.", "default": "replace" },
+    "width": { "type": "number", "description": "Image width in points." },
+    "height": { "type": "number", "description": "Image height in points." },
+    "lockAspectRatio": { "type": "boolean", "description": "Keep width/height proportional." },
+    "altText": { "type": "string", "description": "Accessibility description." },
+    "wrapType": { "type": "string", "enum": ["inline", "square", "tight", "behind", "inFront"], "description": "Text wrapping preference." }
+  },
+  "required": ["source", "data"],
+  "additionalProperties": false
+}
+```
+
 Returns: `{ shapeId?: string, rangeId: string }`
 
 Example args (MCP tool):
@@ -265,7 +395,7 @@ Socket.IO events:
 - `word:table.deleteColumns`
 - `word:table.setCellText`
 - `word:table.mergeCells`
-- `word:table.applyStyle`
+<!-- table.applyStyle is reserved; not implemented in this server. -->
 
 1) `table.create`
 - Args:
@@ -276,11 +406,51 @@ Socket.IO events:
   - `header` (boolean) — treat first row as a header.
 - Returns: `{ tableId: string, rangeId: string }`
 
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "rows": { "type": "number", "description": "Number of table rows." },
+    "cols": { "type": "number", "description": "Number of table columns." },
+    "scope": {
+      "anyOf": [
+        { "type": "string", "const": "document" },
+        { "type": "string", "const": "selection" },
+        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
+      ],
+      "description": "Where to insert the table."
+    },
+    "location": { "type": "string", "enum": ["start", "end", "before", "after", "replace"], "description": "Insert position relative to scope." },
+    "data": { "type": "array", "items": { "type": "array", "items": { "type": "string" } }, "description": "Initial cell values by row/column." },
+    "header": { "type": "boolean", "description": "Treat first row as a header." }
+  },
+  "required": ["rows", "cols"],
+  "additionalProperties": false
+}
+```
+
 2) `table.insertRows`
 - Args: `{ tableRef: "tableId:<id> | rangeId:<id>", at: number, count: number }`
   - `tableRef` — table id or range pointing to a table.
   - `at` — zero-based row index to insert relative to.
   - `count` — number of rows to insert.
+
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "tableRef": { "type": "string", "pattern": "^(tableId|rangeId):.+", "description": "Table handle: 'tableId:<id>' or 'rangeId:<id>'." },
+    "at": { "type": "number", "description": "Zero-based row index to insert relative to." },
+    "count": { "type": "number", "description": "Number of rows to insert." }
+  },
+  "required": ["tableRef", "at", "count"],
+  "additionalProperties": false
+}
+```
 
 3) `table.insertColumns`
 - Args: `{ tableRef, at: number, count: number }`
@@ -288,10 +458,53 @@ Socket.IO events:
   - `at` — zero-based column index to insert relative to.
   - `count` — number of columns to insert.
 
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "tableRef": { "type": "string", "pattern": "^(tableId|rangeId):.+", "description": "Table handle: 'tableId:<id>' or 'rangeId:<id>'." },
+    "at": { "type": "number", "description": "Zero-based column index to insert relative to." },
+    "count": { "type": "number", "description": "Number of columns to insert." }
+  },
+  "required": ["tableRef", "at", "count"],
+  "additionalProperties": false
+}
+```
+
 4) `table.deleteRows` / `table.deleteColumns`
 - Args: `{ tableRef, indexes: number[] }`
   - `tableRef` — target table id or range.
   - `indexes` — zero-based row/column indexes to delete.
+
+Input Schema (JSON Schema) — table_deleteRows:
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "tableRef": { "type": "string", "pattern": "^(tableId|rangeId):.+", "description": "Table handle: 'tableId:<id>' or 'rangeId:<id>'." },
+    "indexes": { "type": "array", "items": { "type": "number" }, "description": "Row indexes to delete." }
+  },
+  "required": ["tableRef", "indexes"],
+  "additionalProperties": false
+}
+```
+
+Input Schema (JSON Schema) — table_deleteColumns:
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "tableRef": { "type": "string", "pattern": "^(tableId|rangeId):.+", "description": "Table handle: 'tableId:<id>' or 'rangeId:<id>'." },
+    "indexes": { "type": "array", "items": { "type": "number" }, "description": "Column indexes to delete." }
+  },
+  "required": ["tableRef", "indexes"],
+  "additionalProperties": false
+}
+```
 
 5) `table.setCellText`
 - Args: `{ tableRef, row: number, col: number, text: string }`
@@ -299,6 +512,22 @@ Socket.IO events:
   - `row` — zero-based row index.
   - `col` — zero-based column index.
   - `text` — cell text content.
+
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "tableRef": { "type": "string", "pattern": "^(tableId|rangeId):.+", "description": "Table handle: 'tableId:<id>' or 'rangeId:<id>'." },
+    "row": { "type": "number", "description": "Zero-based row index." },
+    "col": { "type": "number", "description": "Zero-based column index." },
+    "text": { "type": "string", "description": "Cell text content." }
+  },
+  "required": ["tableRef", "row", "col", "text"],
+  "additionalProperties": false
+}
+```
 
 6) `table.mergeCells`
 - Args: `{ tableRef, startRow, startCol, rowSpan, colSpan }`
@@ -308,10 +537,24 @@ Socket.IO events:
   - `rowSpan` — number of rows to span.
   - `colSpan` — number of columns to span.
 
-7) `table.applyStyle`
-- Args:
-  - `tableRef` — target table id or range.
-  - `style` — built-in style name or banding/heading flags to apply.
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "tableRef": { "type": "string", "pattern": "^(tableId|rangeId):.+", "description": "Table handle: 'tableId:<id>' or 'rangeId:<id>'." },
+    "startRow": { "type": "number", "description": "Starting row index (zero-based)." },
+    "startCol": { "type": "number", "description": "Starting column index (zero-based)." },
+    "rowSpan": { "type": "number", "description": "Number of rows to span." },
+    "colSpan": { "type": "number", "description": "Number of columns to span." }
+  },
+  "required": ["tableRef", "startRow", "startCol", "rowSpan", "colSpan"],
+  "additionalProperties": false
+}
+```
+
+7) (reserved) table_applyStyle — not implemented in this server.
 
 Example args (create 3x3 and fill one cell):
 ```json
@@ -383,6 +626,61 @@ Args:
 
 Returns: `{ rangeId: string }`
 
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "scope": {
+      "anyOf": [
+        { "type": "string", "const": "document" },
+        { "type": "string", "const": "selection" },
+        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
+      ],
+      "description": "What range to format (default: selection)"
+    },
+    "namedStyle": { "type": "string", "description": "Word style name to apply (e.g., 'Heading 1')." },
+    "precedence": { "type": "string", "enum": ["styleThenOverrides", "overridesThenStyle"], "description": "Order of applying style vs overrides." },
+    "resetDirectFormatting": { "type": "boolean", "description": "Clear existing direct formatting before applying." },
+    "char": {
+      "type": "object",
+      "properties": {
+        "bold": { "type": "boolean", "description": "Make text bold." },
+        "italic": { "type": "boolean", "description": "Italicize text." },
+        "underline": { "type": "string", "enum": ["none", "single", "double"], "description": "Underline style." },
+        "strikeThrough": { "type": "boolean", "description": "Apply single strikethrough." },
+        "doubleStrikeThrough": { "type": "boolean", "description": "Apply double strikethrough." },
+        "allCaps": { "type": "boolean", "description": "Render letters as uppercase." },
+        "smallCaps": { "type": "boolean", "description": "Render letters as small caps." },
+        "superscript": { "type": "boolean", "description": "Raise text above baseline." },
+        "subscript": { "type": "boolean", "description": "Lower text below baseline." },
+        "fontName": { "type": "string", "description": "Font family name." },
+        "fontSize": { "type": "number", "description": "Font size in points." },
+        "color": { "type": "string", "description": "Text color (e.g., '#333333')." },
+        "highlight": { "type": "string", "description": "Text highlight color." }
+      },
+      "additionalProperties": false
+    },
+    "para": {
+      "type": "object",
+      "properties": {
+        "alignment": { "type": "string", "enum": ["left", "center", "right", "justify"], "description": "Paragraph alignment." },
+        "lineSpacing": { "type": "number", "description": "Line spacing multiplier (e.g., 1.15)." },
+        "spaceBefore": { "type": "number", "description": "Space before paragraph (pt)." },
+        "spaceAfter": { "type": "number", "description": "Space after paragraph (pt)." },
+        "leftIndent": { "type": "number", "description": "Left indent (pt)." },
+        "rightIndent": { "type": "number", "description": "Right indent (pt)." },
+        "firstLineIndent": { "type": "number", "description": "First-line indent (pt)." },
+        "list": { "type": "string", "enum": ["none", "bullet", "number"], "description": "List formatting type." }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+```
+
 Example args (MCP tool):
 ```json
 {
@@ -431,7 +729,7 @@ Some providers may prefer a single aggregate MCP tool (e.g., `editTask`) that em
 <a id="op-listStyles"></a>
 ## listStyles
 
-Purpose: provide a list of style names that can be used with `applyStyle` and `table.applyStyle`. Use this to power style pickers or validate style names.
+Purpose: provide a list of style names that can be used with `applyStyle`. Use this to power style pickers or validate style names.
 
 Socket.IO event: `word:listStyles`
 
@@ -441,6 +739,22 @@ Args:
 - `builtInOnly` (boolean; default `true`)
 - `includeLocalized` (boolean; default `true`) — when available, include localized display names in addition to canonical names.
 - `max` (number; optional cap on returned items)
+
+Input Schema (JSON Schema):
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "category": { "type": "string", "enum": ["paragraph", "character", "table", "all"], "description": "Filter by style category." },
+    "query": { "type": "string", "description": "Filter by name substring." },
+    "builtInOnly": { "type": "boolean", "description": "Include only built-in styles." },
+    "includeLocalized": { "type": "boolean", "description": "Include localized display names." },
+    "max": { "type": "number", "description": "Maximum styles to return." }
+  },
+  "additionalProperties": false
+}
+```
 
 Returns:
 ```json
@@ -475,44 +789,7 @@ Suggested response shape (extended):
 ```
 
 
-<a id="op-listParagraphs"></a>
-## listParagraphs
-
-Purpose: enumerate paragraphs within a scope and ensure each paragraph has an associated content control to provide a stable identifier for selection.
-
-Socket.IO event: `word:listParagraphs`
-
-Args:
-- `scope` (`document | selection | rangeId:<id>`, default `document`)
-- `createControls` (boolean, default `true`) — when true, create a content control for any paragraph that lacks one.
-- `controlTagPrefix` (string, default `"mcp-paragraph"`) — used when creating new controls as `tag = "<prefix>:<index>"`.
-- `includeText` (boolean, default `true`) — include paragraph text.
-- `maxChars` (number, optional) — when set, return `excerpt` limited to this length.
-- `filterEmpty` (boolean, default `true`) — exclude empty paragraphs from results.
-
-Returns:
-```json
-{
-  "paragraphs": [
-    {
-      "index": 0,
-      "text": "First paragraph text...",
-      "excerpt": "First para...",
-      "rangeId": "rangeId:abc",
-      "ccId": 42,
-      "ccTag": "mcp-paragraph:0"
-    }
-  ]
-}
-```
-
-Office.js mapping and notes:
-- Resolve base via `scope` and load `base.paragraphs`.
-- Iterate paragraphs: for each paragraph `p`, get `const r = p.getRange()`.
-- Try to find an enclosing content control via `r.parentContentControl` (load `id`, `tag`, `title`).
-- If none and `createControls=true`, do `const cc = p.insertContentControl(); cc.tag = "<prefix>:<index>"; cc.title = cc.tag;`.
-- Track each paragraph range to return a `rangeId` if desired; return `cc.id` and `cc.tag` when available.
-- Use `p.text` for text; if `maxChars` provided, compute a shorter `excerpt`.
+<!-- listParagraphs: reserved for future use; not implemented in this server. -->
 
 
 ## Office.js API Used
