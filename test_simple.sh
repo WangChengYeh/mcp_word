@@ -47,7 +47,7 @@ import { spawn } from 'node:child_process';
 import https from 'node:https';
 import { io } from 'socket.io-client';
 
-const port = Number(process.env.PORT || 3000);
+const port = Number(process.env.PORT || 3100);
 const userInputRaw = process.env.TEST_INPUT || '';
 const userLines = userInputRaw.trim()
   ? userInputRaw.split(/\r?\n/).map(l => l.trim()).filter(l => l.length)

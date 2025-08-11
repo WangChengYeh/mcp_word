@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import process from "process";
 import { fileURLToPath } from "url";
+import { Transform, PassThrough } from "node:stream";
 // schemas and tool registration moved to tool.js
 
 // MCP SDK
@@ -146,33 +147,59 @@ async function main() {
     });
   });
 
-  // In debug mode, simply dump raw STDIN bytes to debug.log (no frame parsing)
+  // Build stdio pipes: stdin -> inPipe -> MCP, MCP -> outPipe -> stdout
+  // The in/out pipes optionally mirror traffic to debug.log
   let debugLogStream = null;
   if (DEBUG) {
     try {
       debugLogStream = fs.createWriteStream(debugLogPath, { flags: "a" });
-      process.stdin.on("data", (chunk) => {
-        try {
-          debugLogStream.write(chunk);
-        } catch {}
-      });
-
-      // Tee STDOUT to debug.log without altering MCP output
-      try {
-        const originalWrite = process.stdout.write.bind(process.stdout);
-        process.stdout.write = function (chunk, encoding, cb) {
-          try {
-            if (debugLogStream) {
-              // Preserve encoding when provided for string writes
-              const enc = typeof encoding === "string" ? encoding : undefined;
-              debugLogStream.write(chunk, enc);
-            }
-          } catch {}
-          return originalWrite(chunk, encoding, cb);
-        };
-      } catch {}
     } catch {}
   }
+
+  const inPipe = new Transform({
+    transform(chunk, enc, cb) {
+      if (debugLogStream) {
+        try {
+          const prefix = Buffer.from(`\n[in ${new Date().toISOString()}] `);
+          const ok1 = debugLogStream.write(prefix);
+          const ok2 = debugLogStream.write(chunk);
+          if (!ok1 || !ok2) {
+            debugLogStream.once("drain", () => cb());
+            return;
+          }
+        } catch {}
+      }
+      cb(null, chunk);
+    },
+  });
+
+  const outPipe = new Transform({
+    transform(chunk, enc, cb) {
+      if (debugLogStream) {
+        try {
+          const prefix = Buffer.from(`\n[out ${new Date().toISOString()}] `);
+          const ok1 = debugLogStream.write(prefix);
+          const ok2 = debugLogStream.write(chunk);
+          if (!ok1 || !ok2) {
+            debugLogStream.once("drain", () => cb(null, chunk));
+            return;
+          }
+        } catch {}
+      }
+      cb(null, chunk);
+    },
+  });
+
+  // Connect physical stdio to our pipes
+  try {
+    process.stdin.pipe(inPipe);
+  } catch {}
+  try {
+    const toStdout = new PassThrough();
+    toStdout.pipe(process.stdout);
+    // outPipe pushes to toStdout, which writes to actual stdout
+    outPipe.pipe(toStdout);
+  } catch {}
 
   // Connect MCP STDIO
   // Register tools BEFORE connecting transport (dynamic import based on --simple)
@@ -189,7 +216,8 @@ async function main() {
     process.exit(1);
   }
 
-  const transport = new StdioServerTransport();
+  // Feed MCP transport with our pipes
+  const transport = new StdioServerTransport(inPipe, outPipe);
   await mcp.connect(transport);
   log("MCP server connected via STDIO");
 
