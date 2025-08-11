@@ -97,7 +97,7 @@ async function waitHealthz(timeoutMs = 10000) {
 function sendMcp(obj) {
   const data = JSON.stringify(obj);
   const len = Buffer.byteLength(data, 'utf8');
-  const frame = `Content-Length: ${len}\r\n\r\n${data}`;
+  const frame = `${data}\r\n`;
   server.stdin.write(frame);
 }
 
