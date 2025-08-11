@@ -28,17 +28,6 @@ async function main() {
 
   // Socket client to observe events emitted by server
   const socket = io(`https://localhost:${PORT}`, { transports: ['websocket'] });
-  function ai_cmd (ai_key) {
-	return new Promise((resolve, reject) => {
-		const t = setTimeout(() => reject(new Error(`${ai_key} timeout`)), 10000);
-		socket.on(ai_key, (data) => {
-			if (data) {
-				clearTimeout(t);
-				resolve();
-			}
-		});
-	});
-  }
 
   const events = [];
   socket.onAny((event, payload) => {
@@ -75,15 +64,9 @@ async function main() {
   required.forEach(n => assert(toolNames.includes(n), `missing tool: ${n}`));
 
   // Call a couple of tools
-  const ai_wait_1 = ai_cmd('word:insertText');
   await client.callTool('insertText', { text: 'Hello from test', scope: 'document', location: 'end' });
-  await ai_wait_1;
-  const ai_wait_2 = ai_cmd('word:search');
   await client.callTool('search', { query: 'Hello', scope: 'document', matchWholeWord: false });
-  await ai_wait_2;
-  const ai_wait_3 = ai_cmd('word:listStyles');
   await client.callTool('listStyles', { category: 'paragraph' });
-  await ai_wait_3;
 
   // Verify socket events observed
   const names = events.map(e => e.event);
