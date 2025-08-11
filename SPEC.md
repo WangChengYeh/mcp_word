@@ -20,7 +20,7 @@ flowchart LR
 ### 3.1 MCP Server (`server.js`)
   1. import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
   2. import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-  3. server.registerTool to add Tool in MCP server (in file tool.js)
+  3. server.registerTool to add Tool in MCP server (in file tool.js), follow schema rules, defined by schema.json
   4. forward the payload (MCP tool json string) to socket.io (in file tool.js)
   5. tool handling only in tool.js, server.js only forward json string or json object
   6. io.emit(tool name, tool params) to office add-in
