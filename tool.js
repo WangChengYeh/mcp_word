@@ -4,14 +4,9 @@
 import { z } from "zod";
 
 export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
-  const Scope = z.union([z.literal("document"), z.literal("selection"), z.string().regex(/^rangeId:.+/)]);
-  const Location = z.union([
-    z.literal("start"),
-    z.literal("end"),
-    z.literal("before"),
-    z.literal("after"),
-    z.literal("replace"),
-  ]);
+  // Allow fixed values or a rangeId:... reference
+  const Scope = z.union([z.enum(["document", "selection"]), z.string().regex(/^rangeId:.+/)]);
+  const Location = z.enum(["start", "end", "before", "after", "replace"]);
 
   const emitTool = (event, args) => {
     try { log(`[emit] ${event} ${JSON.stringify(args || {})}`); } catch {}
@@ -79,7 +74,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
       matchWholeWord: z.boolean().optional(),
       matchPrefix: z.boolean().optional(),
       replaceWith: z.string(),
-      mode: z.union([z.literal("replaceFirst"), z.literal("replaceAll")]).optional(),
+      mode: z.enum(["replaceFirst", "replaceAll"]).optional(),
       scope: Scope.optional(),
     },
     "word:replace"
@@ -89,7 +84,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   reg(
     "insertPicture",
     {
-      source: z.union([z.literal("url"), z.literal("base64")]),
+      source: z.enum(["url", "base64"]),
       data: z.string(),
       scope: Scope.optional().default("selection"),
       location: Location.optional().default("replace"),
@@ -97,15 +92,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
       height: z.number().optional(),
       lockAspectRatio: z.boolean().optional(),
       altText: z.string().optional(),
-      wrapType: z
-        .union([
-          z.literal("inline"),
-          z.literal("square"),
-          z.literal("tight"),
-          z.literal("behind"),
-          z.literal("inFront"),
-        ])
-        .optional(),
+      wrapType: z.enum(["inline", "square", "tight", "behind", "inFront"]).optional(),
     },
     "word:insertPicture"
   );
@@ -134,13 +121,13 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     {
       scope: Scope.optional(),
       namedStyle: z.string().optional(),
-      precedence: z.union([z.literal("styleThenOverrides"), z.literal("overridesThenStyle")]).optional(),
+      precedence: z.enum(["styleThenOverrides", "overridesThenStyle"]).optional(),
       resetDirectFormatting: z.boolean().optional(),
       char: z
         .object({
           bold: z.boolean().optional(),
           italic: z.boolean().optional(),
-          underline: z.union([z.literal("none"), z.literal("single"), z.literal("double")]).optional(),
+          underline: z.enum(["none", "single", "double"]).optional(),
           strikeThrough: z.boolean().optional(),
           doubleStrikeThrough: z.boolean().optional(),
           allCaps: z.boolean().optional(),
@@ -156,14 +143,14 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
         .optional(),
       para: z
         .object({
-          alignment: z.union([z.literal("left"), z.literal("center"), z.literal("right"), z.literal("justify")]).optional(),
+          alignment: z.enum(["left", "center", "right", "justify"]).optional(),
           lineSpacing: z.number().optional(),
           spaceBefore: z.number().optional(),
           spaceAfter: z.number().optional(),
           leftIndent: z.number().optional(),
           rightIndent: z.number().optional(),
           firstLineIndent: z.number().optional(),
-          list: z.union([z.literal("none"), z.literal("bullet"), z.literal("number")]).optional(),
+          list: z.enum(["none", "bullet", "number"]).optional(),
         })
         .partial()
         .optional(),
@@ -174,7 +161,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   reg(
     "listStyles",
     {
-      category: z.union([z.literal("paragraph"), z.literal("character"), z.literal("table"), z.literal("all")]).optional(),
+      category: z.enum(["paragraph", "character", "table", "all"]).optional(),
       query: z.string().optional(),
       builtInOnly: z.boolean().optional(),
       includeLocalized: z.boolean().optional(),
