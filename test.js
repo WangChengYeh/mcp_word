@@ -57,7 +57,7 @@ async function main() {
   log('tools:', toolNames.join(', '));
   const required = [
     'insertText','getSelection','search','replace','insertPicture',
-    'table.create','table.insertRows','table.insertColumns','table.deleteRows','table.deleteColumns','table.setCellText','table.mergeCells','table.applyStyle',
+    'table.create','table.insertRows','table.insertColumns','table.deleteRows','table.deleteColumns','table.setCellText','table.mergeCells',
     'applyStyle','listStyles','ping'
   ];
   required.forEach(n => assert(toolNames.includes(n), `missing tool: ${n}`));

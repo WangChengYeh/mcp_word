@@ -18,12 +18,12 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     io.emit(event, args || {});
   };
 
-  const reg = (name, schema, event, description) => {
+  const reg = (name, schema, event, desc) => {
     mcp.registerTool(
       name,
       {
-        description: description || `${name} → Socket.IO '${event}'`,
-        inputSchema: schema || z.object({}).passthrough(),
+        description: desc || `${name} → Socket.IO '${event}'`,
+        inputSchema: schema || {},
       },
       async (args, _ctx) => {
         try {
@@ -40,21 +40,21 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   // ---------- Text ----------
   reg(
     "insertText",
-    z.object({
+    {
       text: z.string(),
       scope: Scope.optional().default("selection"),
       location: Location.optional().default("replace"),
       newParagraph: z.boolean().optional(),
       keepFormatting: z.boolean().optional(),
-    }).passthrough(),
+    },
     "word:insertText"
   );
 
-  reg("getSelection", z.object({}).passthrough(), "word:getSelection");
+  reg("getSelection", {}, "word:getSelection");
 
   reg(
     "search",
-    z.object({
+    {
       query: z.string(),
       scope: Scope.optional().default("document"),
       useRegex: z.boolean().optional(),
@@ -65,13 +65,13 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
       ignoreSpace: z.boolean().optional(),
       ignorePunct: z.boolean().optional(),
       maxResults: z.number().optional(),
-    }).passthrough(),
+    },
     "word:search"
   );
 
   reg(
     "replace",
-    z.object({
+    {
       target: z.union([Scope, z.literal("searchQuery")]),
       query: z.string().optional(),
       useRegex: z.boolean().optional(),
@@ -81,14 +81,14 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
       replaceWith: z.string(),
       mode: z.union([z.literal("replaceFirst"), z.literal("replaceAll")]).optional(),
       scope: Scope.optional(),
-    }).passthrough(),
+    },
     "word:replace"
   );
 
   // ---------- Pictures ----------
   reg(
     "insertPicture",
-    z.object({
+    {
       source: z.union([z.literal("url"), z.literal("base64")]),
       data: z.string(),
       scope: Scope.optional().default("selection"),
@@ -106,7 +106,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
           z.literal("inFront"),
         ])
         .optional(),
-    }).passthrough(),
+    },
     "word:insertPicture"
   );
 
@@ -114,42 +114,24 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   const tableRef = z.union([z.string().regex(/^tableId:.+/), z.string().regex(/^rangeId:.+/)]);
   reg(
     "table.create",
-    z.object({ rows: z.number(), cols: z.number(), scope: Scope.optional(), location: Location.optional(), data: z.array(z.array(z.string())).optional(), header: z.boolean().optional() }).passthrough(),
+    { rows: z.number(), cols: z.number(), scope: Scope.optional(), location: Location.optional(), data: z.array(z.array(z.string())).optional(), header: z.boolean().optional() },
     "word:table.create"
   );
-  reg("table.insertRows", z.object({ tableRef: tableRef, at: z.number(), count: z.number() }).passthrough(), "word:table.insertRows");
-  reg("table.insertColumns", z.object({ tableRef: tableRef, at: z.number(), count: z.number() }).passthrough(), "word:table.insertColumns");
-  reg("table.deleteRows", z.object({ tableRef: tableRef, indexes: z.array(z.number()) }).passthrough(), "word:table.deleteRows");
-  reg("table.deleteColumns", z.object({ tableRef: tableRef, indexes: z.array(z.number()) }).passthrough(), "word:table.deleteColumns");
-  reg("table.setCellText", z.object({ tableRef: tableRef, row: z.number(), col: z.number(), text: z.string() }).passthrough(), "word:table.setCellText");
+  reg("table.insertRows", { tableRef: tableRef, at: z.number(), count: z.number() }, "word:table.insertRows");
+  reg("table.insertColumns", { tableRef: tableRef, at: z.number(), count: z.number() }, "word:table.insertColumns");
+  reg("table.deleteRows", { tableRef: tableRef, indexes: z.array(z.number()) }, "word:table.deleteRows");
+  reg("table.deleteColumns", { tableRef: tableRef, indexes: z.array(z.number()) }, "word:table.deleteColumns");
+  reg("table.setCellText", { tableRef: tableRef, row: z.number(), col: z.number(), text: z.string() }, "word:table.setCellText");
   reg(
     "table.mergeCells",
-    z.object({ tableRef: tableRef, startRow: z.number(), startCol: z.number(), rowSpan: z.number(), colSpan: z.number() }).passthrough(),
+    { tableRef: tableRef, startRow: z.number(), startCol: z.number(), rowSpan: z.number(), colSpan: z.number() },
     "word:table.mergeCells"
-  );
-  reg(
-    "table.applyStyle",
-    z.object({
-      tableRef: tableRef,
-      style: z.union([
-        z.string(),
-        z.object({
-          bandedRows: z.boolean().optional(),
-          bandedColumns: z.boolean().optional(),
-          firstRow: z.boolean().optional(),
-          lastRow: z.boolean().optional(),
-          firstColumn: z.boolean().optional(),
-          lastColumn: z.boolean().optional(),
-        }).passthrough(),
-      ]),
-    }).passthrough(),
-    "word:table.applyStyle"
   );
 
   // ---------- Styles ----------
   reg(
     "applyStyle",
-    z.object({
+    {
       scope: Scope.optional(),
       namedStyle: z.string().optional(),
       precedence: z.union([z.literal("styleThenOverrides"), z.literal("overridesThenStyle")]).optional(),
@@ -185,19 +167,19 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
         })
         .partial()
         .optional(),
-    }).passthrough(),
+    },
     "word:applyStyle"
   );
 
   reg(
     "listStyles",
-    z.object({
+    {
       category: z.union([z.literal("paragraph"), z.literal("character"), z.literal("table"), z.literal("all")]).optional(),
       query: z.string().optional(),
       builtInOnly: z.boolean().optional(),
       includeLocalized: z.boolean().optional(),
       max: z.number().optional(),
-    }).passthrough(),
+    },
     "word:listStyles"
   );
 
@@ -208,4 +190,3 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     async (args, _ctx) => ({ content: [{ type: "text", text: args?.message || "pong" }] })
   );
 }
-
