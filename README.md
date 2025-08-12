@@ -18,11 +18,10 @@ flowchart LR
 ### MCP Server (`server.js`)
 1. Imports `McpServer` from `@modelcontextprotocol/sdk/server/mcp.js`
 2. Imports `StdioServerTransport` from `@modelcontextprotocol/sdk/server/stdio.js`
-3. Registers tools via `server.registerTool` (defined in `tool.js`) following schema rules from `schema.json`
-4. Tool registration uses simple enums without `anyOf` patterns
-5. Forwards MCP tool payloads (JSON strings) to Socket.IO clients
-6. Tool handling isolated in `tool.js`; `server.js` only forwards JSON strings/objects
-7. Emits `io.emit(toolName, toolParams)` to Office add-in
+3. Dynamically loads tools via `registerTools` from either `tool.js` (default) or `tool_simple.js` (when `--simple`)
+4. Tool schemas follow `schema.json` with simple enums (no `anyOf`)
+5. Forwards MCP tool payloads (JSON) to Socket.IO clients
+6. Emits `io.emit(toolName, toolParams)` to the Office add‑in
 
 ### Office Add-in (`public/`)
 - **`manifest.xml`**: Defines Add-in ID, version, provider, display name, description. Host: Document; Permissions: ReadWriteDocument
@@ -69,6 +68,9 @@ node server.js --pfx path/to/cert.pfx --passphrase "your-passphrase" --port 3000
 
 # optional verbose logging
 node server.js --key key.pem --cert cert.pem --port 3000 --debug
+
+# simple mode (hooks tool_simple.js for flow testing)
+node server.js --key key.pem --cert cert.pem --port 3000 --simple
 ```
 
 Tips:
@@ -195,6 +197,15 @@ JSON-RPC example (MCP stdio frame):
 
 ## Testing
 
+### Two Modes at a Glance
+
+- Simple mode: `server.js --simple` hooks `tool_simple.js` (flow tests)
+  - Unit: `npm run test:simple`
+  - Integration: `npm run test:int:simple`
+- Normal mode: `server.js` (no `--simple`) hooks `tool.js` (regular usage)
+  - Unit: `npm test`
+  - Integration: `npm run test:int`
+
 ### Unit Tests
 - `test.sh`: Unit test with fake stdio for MCP client and socket connection for Office
 - Uses shell pipeline to provide input
@@ -221,10 +232,10 @@ npm test
 Run via npm commands:
 ```bash
 # Simple mode integration test
-npm run test:inte:simple
+npm run test:int:simple
 
 # Full integration test
-npm run test:inte
+npm run test:int
 ```
 
 ### End-to-End Testing
@@ -260,12 +271,16 @@ Notes:
 mcp_word/
 ├── server.js          # MCP stdio + Socket.IO bridge (HTTPS)
 ├── tool.js            # MCP tool registration + Socket.IO forwarding
+├── tool_simple.js     # Simplified tool set for flow tests (--simple)
 ├── public/
 │   ├── manifest.xml   # Office add-in manifest
 │   ├── taskpane.html  # Minimal task pane
 │   ├── taskpane.js    # Applies edit commands via Office.js
 │   └── taskpane.yaml  # Script Lab snippet for import
 ├── test.sh            # E2E test runner (JSONL over stdio)
+├── test_simple.sh     # Unit test runner for --simple
+├── test.js            # Integration test (normal mode)
+├── test_simple.js     # Integration test (simple mode)
 ├── SPEC.md            # Refined spec
 └── README.md
 ```
