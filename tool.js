@@ -2,40 +2,11 @@
 // Exports registerTools(mcp, io)
 
 import { z } from "zod";
-import Ajv from "ajv";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import { createRequire } from "module";
 
 export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
-  // ---------- JSON Schema (Ajv) for Tool validation ----------
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const require = createRequire(import.meta.url);
+  // Note: Ajv-based schema.json validation removed per request.
 
-  // Load MCP schema.json and prepare Ajv validator for #/definitions/Tool
-  let validateTool;
-  try {
-    const schemaPath = path.join(__dirname, "schema.json");
-    const rawSchema = fs.readFileSync(schemaPath, "utf8");
-    const mcpSchema = JSON.parse(rawSchema);
-
-    const ajv = new Ajv({ allErrors: true, schemaId: "auto", strict: false });
-    try {
-      // Ensure draft-07 meta is available (Ajv v6)
-      const draft7 = require("ajv/lib/refs/json-schema-draft-07.json");
-      ajv.addMetaSchema(draft7);
-    } catch {}
-    ajv.addSchema(mcpSchema, "mcp");
-    validateTool = ajv.getSchema("mcp#/definitions/Tool") || ajv.compile({ $ref: "mcp#/definitions/Tool" });
-  } catch (e) {
-    // Non-fatal: keep working without schema validation
-    validateTool = null;
-    try { logErr(e, "ajv-init"); } catch {}
-  }
-
-  // Best-effort adapter: ensure a minimal JSON Schema object for inputSchema
+  // Best-effort adapter: ensure a minimal JSON Schema-like object for inputSchema
   const toJsonSchemaObject = (candidate) => {
     if (candidate && typeof candidate === "object" && candidate.type) {
       // Assume already a JSON Schema object
@@ -70,24 +41,13 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   const reg = (name_in, schema, event, desc) => {
     const name = name_in.replace(".", "_");
 
-    // Build a Tool object for validation per schema.json#/definitions/Tool
+    // Build a Tool metadata object for registration
     const inputSchema = toJsonSchemaObject(schema);
     const toolForValidation = {
       name,
       description: desc || `${name} → Socket.IO '${event}'`,
       inputSchema,
     };
-
-    // Validate against MCP Tool schema (warn-only on failure)
-    try {
-      if (validateTool && !validateTool(toolForValidation)) {
-        const errs = validateTool.errors || [];
-        const pretty = errs.map((e) => `${e.dataPath || e.instancePath} ${e.message}`).join("; ");
-        logErr(`Tool schema validation failed for ${name}: ${pretty}`, "schema");
-      }
-    } catch (e) {
-      try { logErr(e, `schema-${name}`); } catch {}
-    }
 
     mcp.registerTool(
       name,
