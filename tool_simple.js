@@ -28,10 +28,15 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     },
     async (args, _ctx) => {
       try {
-        // Log the raw JSON string of the args (no decoding/reshaping)
-        try { log(JSON.stringify(args ?? {})); } catch {}
+        // Log standardized DEBUG line for Socket.IO send
+        const payload = args || {};
+        try {
+          log(
+            `[DEBUG socket:send] ${JSON.stringify({ event: "editTask", payload })}`
+          );
+        } catch {}
         // Forward exactly the provided args on event named by tool
-        io.emit("editTask", args || {});
+        io.emit("editTask", payload);
         return { content: [{ type: "text", text: "EditTask forwarded." }] };
       } catch (e) {
         logErr(e, "editTask");

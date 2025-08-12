@@ -1,15 +1,27 @@
 #!/usr/bin/env python3
 """
-Parse debug.log lines of the form:
-    [in/out time] <json>
+Beautify debug.log into structured JSON.
 
-Outputs human-readable JSON containing one object per line with:
-    {
-      "direction": "in" | "out",
-      "time": "...",
-      "header": "[in/out time]",
-      "data": <parsed JSON or raw string if parse fails>
-    }
+Under the refined logging, debug lines look like:
+  [2025-08-12T23:31:22.036Z] [DEBUG stdin] { ... }
+  [2025-08-12T23:31:22.036Z] [DEBUG stdout] { ... }
+  [2025-08-12T23:31:22.036Z] [DEBUG socket:send] {"event":"...","payload":{...}}
+  [2025-08-12T23:31:22.036Z] [DEBUG socket.recv] {"event":"...","payload":{...}}
+
+Older logs may contain legacy frames:
+  [in 2025-08-12T23:00:53.414Z] { ... }
+  [out 2025-08-12T23:00:53.414Z] { ... }
+
+This script normalizes all of the above into entries like:
+  {
+    "type": "stdin" | "stdout" | "socket_send" | "socket_recv" | "debug" | "log" | "raw",
+    "time": "ISO-8601 timestamp when available",
+    "header": "[DEBUG socket.recv]" (when present),
+    "event": "event name for socket logs (if present)",
+    "payload": { ... } (for socket logs),
+    "data": <parsed JSON or raw string>,
+    "raw": "original line"
+  }
 
 Usage:
   python debug.py                 # reads ./debug.log, prints pretty JSON array
@@ -26,29 +38,111 @@ import re
 import sys
 from pathlib import Path
 
-LINE_RE = re.compile(r"^\[(in|out)\s+([^\]]+)\]\s*(.*)$", re.IGNORECASE)
+LEGACY_INOUT_RE = re.compile(r"^\[(in|out)\s+([^\]]+)\]\s*(.*)$", re.IGNORECASE)
+TS_PREFIX_RE = re.compile(r"^\[(\d{4}-\d{2}-\d{2}T[^\]]+)\]\s*(.*)$")
+DEBUG_TAG_RE = re.compile(r"^\[(DEBUG [^\]]+)\]\s*(.*)$")
 
 
 def parse_line(line: str):
     line = line.rstrip("\n")
     if not line.strip():
         return None
-    m = LINE_RE.match(line)
-    if not m:
-        # Not matching the expected prefix; treat entire line as raw data
+    raw = line
+
+    # 1) Timestamped lines: [ISO] <rest>
+    m_ts = TS_PREFIX_RE.match(line)
+    if m_ts:
+        ts, rest = m_ts.groups()
+        # 1a) Timestamped DEBUG-tagged lines: [DEBUG ...] payload
+        m_dbg = DEBUG_TAG_RE.match(rest)
+        if m_dbg:
+            tag, payload = m_dbg.groups()
+            tag_lower = tag.lower()
+            entry = {
+                "type": "debug",
+                "time": ts,
+                "header": f"[{tag}]",
+                "data": None,
+                "raw": raw,
+            }
+            parsed = _parse_json(payload)
+            entry["data"] = parsed
+
+            # Specialize known tags
+            if tag_lower == "debug stdin":
+                entry["type"] = "stdin"
+            elif tag_lower == "debug stdout":
+                entry["type"] = "stdout"
+            elif tag_lower == "debug socket:send":
+                entry["type"] = "socket_send"
+                if isinstance(parsed, dict):
+                    entry["event"] = parsed.get("event")
+                    entry["payload"] = parsed.get("payload")
+            elif tag_lower == "debug socket.recv":
+                entry["type"] = "socket_recv"
+                if isinstance(parsed, dict):
+                    entry["event"] = parsed.get("event")
+                    entry["payload"] = parsed.get("payload")
+            return entry
+
+        # 1b) Other timestamped lines: treat as generic log
         return {
-            "direction": None,
-            "time": None,
+            "type": "log",
+            "time": ts,
             "header": None,
-            "data": line.strip(),
+            "message": rest.strip(),
+            "raw": raw,
         }
-    direction, when, payload = m.groups()
-    data = _parse_json(payload)
+
+    # 2) Non-timestamped DEBUG-tagged lines (older runs)
+    m_dbg = DEBUG_TAG_RE.match(line)
+    if m_dbg:
+        tag, payload = m_dbg.groups()
+        tag_lower = tag.lower()
+        entry = {
+            "type": "debug",
+            "time": None,
+            "header": f"[{tag}]",
+            "data": _parse_json(payload),
+            "raw": raw,
+        }
+        if tag_lower == "debug stdin":
+            entry["type"] = "stdin"
+        elif tag_lower == "debug stdout":
+            entry["type"] = "stdout"
+        elif tag_lower == "debug socket:send":
+            entry["type"] = "socket_send"
+            if isinstance(entry["data"], dict):
+                entry["event"] = entry["data"].get("event")
+                entry["payload"] = entry["data"].get("payload")
+        elif tag_lower == "debug socket.recv":
+            entry["type"] = "socket_recv"
+            if isinstance(entry["data"], dict):
+                entry["event"] = entry["data"].get("event")
+                entry["payload"] = entry["data"].get("payload")
+        return entry
+
+    # 3) Legacy [in/out time] payload lines
+    m_legacy = LEGACY_INOUT_RE.match(line)
+    if m_legacy:
+        direction, when, payload = m_legacy.groups()
+        data = _parse_json(payload)
+        typ = "stdin" if direction.lower() == "in" else "stdout"
+        return {
+            "type": typ,
+            "time": when.strip(),
+            "header": f"[{direction} {when}]",
+            "data": data,
+            "raw": raw,
+        }
+
+    # 4) Fallback: raw message
     return {
-        "direction": direction.lower(),
-        "time": when.strip(),
-        "header": f"[{direction} {when}]",
-        "data": data,
+        "type": "raw",
+        "time": None,
+        "header": None,
+        "data": line.strip(),
+        "raw": raw,
     }
 
 

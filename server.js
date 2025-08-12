@@ -62,8 +62,12 @@ function log(...args) {
   const line = `[${new Date().toISOString()}] ${args
     .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
     .join(" ")}`;
-  // IMPORTANT: write logs to stderr to keep stdout clean for MCP stdio
-  console.error(line);
+  // Write directly to stderr (keep stdout clean for MCP stdio)
+  try { process.stderr.write(line + "\n"); } catch {}
+  // Also mirror to debug.log when enabled
+  if (debugLogStream) {
+    try { debugLogStream.write(line + "\n"); } catch {}
+  }
 }
 function logErr(err, ctx = "error") {
   const msg =
@@ -72,7 +76,11 @@ function logErr(err, ctx = "error") {
       : typeof err === "string"
       ? err
       : JSON.stringify(err);
-  console.error(`[${new Date().toISOString()}] ${ctx}: ${msg}`);
+  const line = `[${new Date().toISOString()}] ${ctx}: ${msg}`;
+  try { process.stderr.write(line + "\n"); } catch {}
+  if (debugLogStream) {
+    try { debugLogStream.write(line + "\n"); } catch {}
+  }
 }
 
 // ---------- HTTPS + Socket.IO ----------
@@ -125,8 +133,10 @@ io.on("connection", (socket) => {
   try {
     socket.onAny((event, payload) => {
       try {
-        // Keep stderr visibility in debug, but avoid writing to debug.log
-        if (DEBUG) console.error(`[socket:recv] ${event} ${JSON.stringify(payload || {})}`);
+        if (DEBUG) {
+          const pl = payload || {};
+          log(`[DEBUG socket.recv] ${JSON.stringify({ event, payload: pl })}`);
+        }
       } catch {}
     });
   } catch {}
@@ -164,10 +174,8 @@ async function main() {
   // Tee all console output to stderr and (if --debug) to debug.log
   try {
     const writeLine = (line) => {
-      try { process.stderr.write(String(line) + "\n"); } catch {}
-      if (debugLogStream) {
-        try { debugLogStream.write(String(line) + "\n"); } catch {}
-      }
+      // Route through our logger to ensure consistent handling and mirroring
+      try { log(String(line)); } catch {}
     };
     const mkConsole = (orig) => (...args) => {
       try {
@@ -186,34 +194,14 @@ async function main() {
 
   const inPipe = new Transform({
     transform(chunk, enc, cb) {
-      if (debugLogStream) {
-        try {
-          const prefix = Buffer.from(`\n[in ${new Date().toISOString()}] `);
-          const ok1 = debugLogStream.write(prefix);
-          const ok2 = debugLogStream.write(chunk);
-          if (!ok1 || !ok2) {
-            debugLogStream.once("drain", () => cb());
-            return;
-          }
-        } catch {}
-      }
+      try { log(`[DEBUG stdin] ${chunk.toString("utf8")}`); } catch {}
       cb(null, chunk);
     },
   });
 
   const outPipe = new Transform({
     transform(chunk, enc, cb) {
-      if (debugLogStream) {
-        try {
-          const prefix = Buffer.from(`\n[out ${new Date().toISOString()}] `);
-          const ok1 = debugLogStream.write(prefix);
-          const ok2 = debugLogStream.write(chunk);
-          if (!ok1 || !ok2) {
-            debugLogStream.once("drain", () => cb(null, chunk));
-            return;
-          }
-        } catch {}
-      }
+      try { log(`[DEBUG stdout] ${chunk.toString("utf8")}`); } catch {}
       cb(null, chunk);
     },
   });

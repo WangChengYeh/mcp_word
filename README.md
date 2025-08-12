@@ -190,10 +190,10 @@ JSON-RPC example (MCP stdio frame):
 - Records JSON strings before Socket.IO send and after Socket.IO receive in `debug.log`
 - Health endpoint: `GET https://localhost:3000/healthz` shows connected clients
 - Stream logging in `debug.log`:
-  - `[DEBUG stdin]` raw MCP stdio frames received
-  - `[DEBUG stdout]` raw MCP responses written
-  - `[socket:send] <toolName> <json>` forwarded tool calls to Socket.IO
-  - `[socket:recv] <event> <json>` events received back from the add-in (e.g., `edit-complete`)
+  - `[time][stdin] json string`: raw MCP stdio frames received
+  - `[time][stdout] json string`: raw MCP stdio responses
+  - `[time][socket:send] json string`: forwarded tool calls to Socket.IO
+  - `[time][socket.recv] json string`: received back from the add-in (e.g., `edit-complete`)
 
 ## Testing
 

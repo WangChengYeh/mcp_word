@@ -34,8 +34,15 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     .describe("Table handle: 'tableId:<id>' or 'rangeId:<id>'.");
 
   const emitTool = (event, args) => {
-    try { log(`[emit] ${event} ${JSON.stringify(args || {})}`); } catch {}
-    io.emit(event, args || {});
+    // Emit to Socket.IO and log a concise DEBUG line with JSON payload
+    const payload = args || {};
+    try {
+      // Use console.error to avoid timestamp prefixes from log()
+      log(
+        `[DEBUG socket:send] ${JSON.stringify({ event, payload })}`
+      );
+    } catch {}
+    io.emit(event, payload);
   };
 
   const reg = (name_in, schema, event, desc) => {
