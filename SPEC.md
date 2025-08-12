@@ -92,9 +92,9 @@ The project README must include the following, in order:
 - Office add-in: two options:
   - Sideload `public/manifest.xml` in Word (points to `public/taskpane.xml`).
   - Script Lab alternative: import snippets from https://gist.github.com/WangChengYeh/5b44e6ba1c99baae62ebc0783e1469da
-- Tools: document `editTask` (args and example frame) and `ping`.
-- Debugging: `--debug` behavior and `GET /healthz`.
-- Testing: how to run `./test.sh` and pipe custom MCP JSONL.
+- Tools: document `insertText` (args and example frame)
+- Debugging: `--debug` and check debug.log
+- Testing: how to run test by npm command
 - Project structure and License.
 
 ### 9.2 Codex Client (Codex CLI) setup

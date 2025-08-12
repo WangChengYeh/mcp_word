@@ -6,16 +6,25 @@ AI-driven document editing for Microsoft Word using a local MCP server (stdio) b
 
 ```mermaid
 flowchart LR
-  Codex[Codex/AI Client] -- stdio --> MCP[MCP Server]
-  MCP -- WebSocket --> Addin[Office.js Task Pane]
-  Addin --> Word[Word Document]
+  Codex CLI -- (stdio) -- MCP Server -- (WebSocket) -- Office.js
 ```
 
 ## Components
 
-- MCP server (`server.js`): Uses `@modelcontextprotocol/sdk` with `StdioServerTransport`, bridges edits to Socket.IO clients
-- Tools (`tool.js`): Registers MCP tools (`editTask`, `ping`) and forwards tool arguments to Socket.IO on the tool event (e.g., `editTask`).
-- Office Add-in (public/): `manifest.xml`, `taskpane.html`, `taskpane.js` for receiving AI edit commands and applying them in Word via Office.js; `taskpane.yaml` for Script Lab import.
+### MCP Server (`server.js`)
+1. Imports `McpServer` from `@modelcontextprotocol/sdk/server/mcp.js`
+2. Imports `StdioServerTransport` from `@modelcontextprotocol/sdk/server/stdio.js`
+3. Registers tools via `server.registerTool` (defined in `tool.js`) following schema rules from `schema.json`
+4. Tool registration uses simple enums without `anyOf` patterns
+5. Forwards MCP tool payloads (JSON strings) to Socket.IO clients
+6. Tool handling isolated in `tool.js`; `server.js` only forwards JSON strings/objects
+7. Emits `io.emit(toolName, toolParams)` to Office add-in
+
+### Office Add-in (`public/`)
+- **`manifest.xml`**: Defines Add-in ID, version, provider, display name, description. Host: Document; Permissions: ReadWriteDocument
+- **`taskpane.html`**: Loads Office.js and Socket.io client, includes `taskpane.js`, renders button or auto-start behavior
+- **`taskpane.js`**: Uses `Office.onReady()` for Word host detection, establishes WebSocket with `io()`, listens for MCP tool events, calls Word functions via `Word.run()`, implements error handling
+- **`taskpane.yaml`**: For Script Lab snippet import with libraries including Socket.io
 
 ## Prerequisites
 
@@ -123,10 +132,11 @@ Two ways to connect Word to the server:
 ## Tools
 
 ### editTask
-- purpose: Send an edit instruction to the add-in via Socket.IO (event name `editTask`).
-- args:
+- **Purpose**: Send an edit instruction to the add-in via Socket.IO (event name `editTask`)
+- **Schema**: Follows `schema.json` rules with simple enums (no `anyOf` patterns)
+- **Args**:
   - `content` (string, required): text to insert/replace
-  - `action` ("insert" | "replace" | "append", default "insert")
+  - `action` ("insert" | "replace" | "append", default "insert")  
   - `target` ("cursor" | "selection" | "document", default "selection")
   - `taskId` (string, optional)
   - `meta` (object, optional)
@@ -148,21 +158,58 @@ JSON-RPC example (MCP stdio frame):
 }
 ```
 
-### ping
-- purpose: health check; echoes `message` or returns `"pong"`.
+### ping  
+- **Purpose**: Health check; echoes `message` or returns `"pong"`
+- **Schema**: Simple tool registration without complex patterns
 
 ## Debugging
 
-- `--debug`: writes detailed logs to `debug.log` and mirrors activity to stderr without polluting MCP stdout.
-- Health endpoint: `GET https://localhost:3000/healthz` shows connected clients.
+- `--debug`: Dumps detailed logs and errors to `debug.log`
+- Records stdio stream input/output into `debug.log`
+- Adds pipes after stdin and before stdout to record and forward if debug enabled
+- Records JSON strings before Socket.IO send and after Socket.IO receive in `debug.log`
+- Health endpoint: `GET https://localhost:3000/healthz` shows connected clients
 - Stream logging in `debug.log`:
-  - `[DEBUG stdin]` raw MCP stdio frames received.
-  - `[DEBUG stdout]` raw MCP responses written.
-  - `[socket:send] <toolName> <json>` forwarded tool calls to Socket.IO.
-  - `[socket:recv] <event> <json>` events received back from the add-in (e.g., `edit-complete`).
+  - `[DEBUG stdin]` raw MCP stdio frames received
+  - `[DEBUG stdout]` raw MCP responses written
+  - `[socket:send] <toolName> <json>` forwarded tool calls to Socket.IO
+  - `[socket:recv] <event> <json>` events received back from the add-in (e.g., `edit-complete`)
 
-## Testing (e2e)
+## Testing
 
+### Unit Tests
+- `test.sh`: Unit test with fake stdio for MCP client and socket connection for Office
+- Uses shell pipeline to provide input
+- Generates test JavaScript as socket client
+- Prepare `package.json` before testing
+- Default test port: 3100 (3000 reserved for normal use)
+- `test_simple.sh`: Tests `server.js --simple` mode using `tool_simple.js`
+
+Run via npm commands:
+```bash
+# Simple mode unit test
+npm run test:simple
+
+# Full unit test
+npm test
+```
+
+### Integration Tests
+- `test.js`: Integration test combining MCP client + MCP server (`server.js`)
+- Uses `Client` from `@modelcontextprotocol/sdk/client/index.js`
+- Lists tools and calls tools (e.g., `ping`, `editTask`)
+- `test_simple.js`: Tests `server.js --simple` mode
+
+Run via npm commands:
+```bash
+# Simple mode integration test
+npm run test:inte:simple
+
+# Full integration test
+npm run test:inte
+```
+
+### End-to-End Testing
 Use the provided script to verify end‑to‑end behavior. It auto-generates a dev cert, starts the server, opens a Socket.IO client, and sends MCP frames via stdio.
 
 ```bash
