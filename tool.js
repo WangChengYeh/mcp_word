@@ -50,16 +50,10 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     .enum(["start", "end", "before", "after", "replace"])
     .describe("Insert position relative to target range.");
 
-  const RangeId = z
-    .string()
-    .regex(/^rangeId:.+/, {
-      message: "Must be 'rangeId:<id>'",
-    })
-    .describe("A tracked range reference: 'rangeId:<id>'.");
-
+  // Scopes follow tool.md: enums only; providers may still accept 'rangeId:<id>'
   const Scope = z
-    .union([z.literal("document"), z.literal("selection"), RangeId])
-    .describe("Where to target: document, selection, or a saved rangeId.");
+    .enum(["document", "selection"])
+    .describe("Where to target (document|selection). Also accepts 'rangeId:<id>'.");
 
   const TableRef = z
     .string()
@@ -118,7 +112,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     "insertText",
     {
       text: z.string().describe("Text content to insert."),
-      scope: Scope.optional().default("selection").describe("Where to insert (default: selection)."),
+      scope: Scope.optional().default("selection").describe("Where to insert (default: selection). Also accepts 'rangeId:<id>'."),
       location: Location.optional().default("replace").describe("Position relative to scope (default: replace)."),
       newParagraph: z.boolean().optional().describe("Insert as a new paragraph when true."),
       keepFormatting: z
@@ -141,7 +135,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     "search",
     {
       query: z.string().describe("Text to find (wildcards supported)."),
-      scope: Scope.optional().default("document").describe("Where to search (default: document)."),
+      scope: Scope.optional().default("document").describe("Where to search (default: document). Also accepts 'rangeId:<id>'."),
       useRegex: z.boolean().optional().describe("Treat query as regex (may be unsupported)."),
       matchCase: z.boolean().optional().describe("Match case exactly."),
       matchWholeWord: z.boolean().optional().describe("Match whole words only."),
@@ -159,8 +153,8 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     "replace",
     {
       target: z
-        .union([Scope, z.literal("searchQuery")])
-        .describe("What to replace: a scope, rangeId, or 'searchQuery'."),
+        .enum(["document", "selection", "searchQuery"])
+        .describe("What to replace: a scope or 'searchQuery'. Also accepts 'rangeId:<id>'."),
       query: z
         .string()
         .optional()
@@ -187,7 +181,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     {
       source: z.enum(["url", "base64"]).describe("Image input type."),
       data: z.string().describe("Image URL or base64 string."),
-      scope: Scope.optional().default("selection").describe("Where to insert the image."),
+      scope: Scope.optional().default("selection").describe("Where to insert the image. Also accepts 'rangeId:<id>'."),
       location: Location.optional().default("replace").describe("Insert position relative to scope."),
       width: z.number().optional().describe("Image width in points."),
       height: z.number().optional().describe("Image height in points."),
@@ -207,7 +201,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
     {
       rows: z.number().describe("Number of table rows."),
       cols: z.number().describe("Number of table columns."),
-      scope: Scope.optional().describe("Where to insert the table."),
+      scope: Scope.optional().describe("Where to insert the table. Also accepts 'rangeId:<id>'."),
       location: Location.optional().describe("Insert position relative to scope."),
       data: z
         .array(z.array(z.string()))
@@ -278,7 +272,7 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   reg(
     "applyStyle",
     {
-      scope: Scope.optional().describe("What range to format (default: selection)."),
+      scope: Scope.optional().describe("What range to format (default: selection). Also accepts 'rangeId:<id>'."),
       namedStyle: z.string().optional().describe("Word style name to apply (e.g., 'Heading 1')."),
       precedence: z
         .enum(["styleThenOverrides", "overridesThenStyle"])        .optional()

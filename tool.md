@@ -84,12 +84,9 @@ Input Schema (JSON Schema):
   "properties": {
     "text": { "type": "string", "description": "Text content to insert." },
     "scope": {
-      "anyOf": [
-        { "type": "string", "const": "document" },
-        { "type": "string", "const": "selection" },
-        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
-      ],
-      "description": "Where to insert (default: selection)",
+      "type": "string",
+      "enum": ["document", "selection"],
+      "description": "Where to insert (default: selection). Also accepts 'rangeId:<id>' for tracked ranges.",
       "default": "selection"
     },
     "location": {
@@ -204,12 +201,9 @@ Input Schema (JSON Schema):
   "properties": {
     "query": { "type": "string", "description": "Text to find (wildcards supported)." },
     "scope": {
-      "anyOf": [
-        { "type": "string", "const": "document" },
-        { "type": "string", "const": "selection" },
-        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
-      ],
-      "description": "Where to search (default: document)",
+      "type": "string",
+      "enum": ["document", "selection"],
+      "description": "Where to search (default: document). Also accepts 'rangeId:<id>' for tracked ranges.",
       "default": "document"
     },
     "useRegex": { "type": "boolean", "description": "Treat query as regex (may be unsupported)." },
@@ -271,13 +265,9 @@ Input Schema (JSON Schema):
   "type": "object",
   "properties": {
     "target": {
-      "anyOf": [
-        { "type": "string", "const": "document" },
-        { "type": "string", "const": "selection" },
-        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." },
-        { "type": "string", "const": "searchQuery" }
-      ],
-      "description": "What to replace: a scope, rangeId, or 'searchQuery'."
+      "type": "string",
+      "enum": ["document", "selection", "searchQuery"],
+      "description": "What to replace: a scope or 'searchQuery'. Also accepts 'rangeId:<id>'."
     },
     "query": { "type": "string", "description": "Search text when target is 'searchQuery'." },
     "useRegex": { "type": "boolean", "description": "Treat query as regex (may be unsupported)." },
@@ -341,12 +331,9 @@ Input Schema (JSON Schema):
     "source": { "type": "string", "enum": ["url", "base64"], "description": "Image input type." },
     "data": { "type": "string", "description": "Image URL or base64 string." },
     "scope": {
-      "anyOf": [
-        { "type": "string", "const": "document" },
-        { "type": "string", "const": "selection" },
-        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
-      ],
-      "description": "Where to insert the image.",
+      "type": "string",
+      "enum": ["document", "selection"],
+      "description": "Where to insert the image. Also accepts 'rangeId:<id>' for tracked ranges.",
       "default": "selection"
     },
     "location": { "type": "string", "enum": ["start", "end", "before", "after", "replace"], "description": "Insert position relative to scope.", "default": "replace" },
@@ -415,12 +402,9 @@ Input Schema (JSON Schema):
     "rows": { "type": "number", "description": "Number of table rows." },
     "cols": { "type": "number", "description": "Number of table columns." },
     "scope": {
-      "anyOf": [
-        { "type": "string", "const": "document" },
-        { "type": "string", "const": "selection" },
-        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
-      ],
-      "description": "Where to insert the table."
+      "type": "string",
+      "enum": ["document", "selection"],
+      "description": "Where to insert the table. Also accepts 'rangeId:<id>' for tracked ranges."
     },
     "location": { "type": "string", "enum": ["start", "end", "before", "after", "replace"], "description": "Insert position relative to scope." },
     "data": { "type": "array", "items": { "type": "array", "items": { "type": "string" } }, "description": "Initial cell values by row/column." },
@@ -633,12 +617,9 @@ Input Schema (JSON Schema):
   "type": "object",
   "properties": {
     "scope": {
-      "anyOf": [
-        { "type": "string", "const": "document" },
-        { "type": "string", "const": "selection" },
-        { "type": "string", "pattern": "^rangeId:.+", "description": "A tracked range reference: 'rangeId:<id>'." }
-      ],
-      "description": "What range to format (default: selection)"
+      "type": "string",
+      "enum": ["document", "selection"],
+      "description": "What range to format (default: selection). Also accepts 'rangeId:<id>' for tracked ranges."
     },
     "namedStyle": { "type": "string", "description": "Word style name to apply (e.g., 'Heading 1')." },
     "precedence": { "type": "string", "enum": ["styleThenOverrides", "overridesThenStyle"], "description": "Order of applying style vs overrides." },
