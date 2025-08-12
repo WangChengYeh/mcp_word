@@ -33,6 +33,7 @@ async function main() {
   socket.onAny((event, payload) => {
     if (String(event).startsWith('word:')) {
       events.push({ event, payload });
+      socket.emit(event, {ok: true});
     }
   });
 
@@ -53,8 +54,10 @@ async function main() {
   log('mcp client connected via stdio');
 
   // list tools and basic presence checks
-  const listed = await client.listTools();
-  const toolNames = (listed?.tools || []).map(t => t.name);
+  const list = await client.listTools();
+  console.error('List tools', list);
+
+  const toolNames = (list?.tools || []).map(t => t.name);
   log('tools:', toolNames.join(', '));
   const required = [
     'insertText','getSelection','search','replace','insertPicture',

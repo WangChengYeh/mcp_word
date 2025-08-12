@@ -94,7 +94,7 @@ async function main() {
 
     // Verify tools list contains expected tools
     const list = await client.listTools({});
-    console.error('List tools', JSON.stringify(list,null, 2));
+    console.error('List tools', list);
     const toolNames = new Set(list.tools.map((t) => t.name));
     if (!toolNames.has('ping') || !toolNames.has('editTask')) {
       throw new Error(`Expected tools ping and editTask, got: ${[...toolNames].join(', ')}`);
