@@ -1,6 +1,10 @@
 # MCP Word — MCP Server + Office Add-in
 
-AI-driven document editing for Microsoft Word using a local MCP server (stdio) bridged to an Office.js task pane via Socket.IO over HTTPS.
+**Version**: 1.0.0  
+**Date**: 2025-08-07  
+**Language**: English only
+
+AI-driven document editing for Microsoft Word using a local MCP server (stdio) bridged to an Office.js task pane via Socket.IO over HTTPS. This project builds a MCP server (`node server.js`) alongside an Office.js Word Add-in client to enable AI-driven document editing workflows.
 
 ## Architecture
 
@@ -25,6 +29,20 @@ flowchart LR
 - **`taskpane.html`**: Loads Office.js and Socket.io client, includes `taskpane.js`, renders button or auto-start behavior
 - **`taskpane.js`**: Uses `Office.onReady()` for Word host detection, establishes WebSocket with `io()`, listens for MCP tool events, calls Word functions via `Word.run()`, implements error handling
 - **`taskpane.yaml`**: For Script Lab snippet import with libraries including Socket.io
+
+### Snippet Upload
+Upload to gist via package.json script:
+```bash
+npm run snippet  # Runs: cd public && gh gist edit 5b44e6ba1c99baae62ebc0783e1469da --add taskpane.yaml
+```
+
+## Workflow
+
+1. **Install the MCP server**: `npm install`
+2. **Start the server**: Use stdio from Codex CLI or fake master, use unix pipeline to provide input
+3. **Sideload the Add-in**: Load manifest in Word 
+4. **Send EditTask requests**: Via Codex CLI or another service, e.g. `{ content: '...' }`
+5. **Real-time edits**: The Add-in client receives edits in real time and applies them to the document
 
 ## Prerequisites
 
@@ -231,6 +249,11 @@ Notes:
 - The script extracts expected content from the first `editTask` line.
 - Accepts self-signed certs for test convenience.
 
+## Extensibility
+
+- Support additional `EditTask` types (tables, images, formatting)
+- Add WebSocket authentication, logging, and error tracking
+
 ## Project Structure
 
 ```
@@ -246,6 +269,20 @@ mcp_word/
 ├── SPEC.md            # Refined spec
 └── README.md
 ```
+
+## Documentation Requirements
+
+This README follows the SPEC requirements and includes (in order):
+- Prerequisites: Node.js version, Microsoft Word, and trusted HTTPS cert note
+- Install: `npm install`
+- Run server: HTTPS launch examples (PEM and PFX), plus `--debug`
+- Create a local dev certificate: OpenSSL commands to generate PEM and PFX
+- Configure MCP client: Codex Client setup via `.codex/config.toml`
+- Office add-in: Two options (Sideload manifest or Script Lab snippets)
+- Tools: Document `editTask` and `ping` tools with args and examples
+- Debugging: `--debug` and debug.log details
+- Testing: How to run tests by npm command
+- Project structure and License
 
 ## License
 
