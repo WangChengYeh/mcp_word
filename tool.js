@@ -41,19 +41,11 @@ export function registerTools(mcp, io, log = () => {}, logErr = () => {}) {
   const reg = (name_in, schema, event, desc) => {
     const name = name_in.replace(".", "_");
 
-    // Build a Tool metadata object for registration
-    const inputSchema = toJsonSchemaObject(schema);
-    const toolForValidation = {
-      name,
-      description: desc || `${name} → Socket.IO '${event}'`,
-      inputSchema,
-    };
-
     mcp.registerTool(
       name,
       {
-        description: toolForValidation.description,
-        inputSchema,
+        description: desc,
+        inputSchema: schema,
       },
       async (args, _ctx) => {
         try {
