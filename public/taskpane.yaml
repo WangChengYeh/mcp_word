@@ -16,7 +16,8 @@ script:
        Event names and args follow tool.md. Sends results back via 'word:result'. */
 
     (function () {
-      const socket = io();
+      const socket = io("https://localhost:3000", {transports: ["websocket"]});
+
 
       const state = {
         ranges: new Map(), // id -> Word.Range (tracked)
