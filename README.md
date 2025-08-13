@@ -10,7 +10,8 @@ AI-driven document editing for Microsoft Word using a local MCP server (stdio) b
 
 ```mermaid
 flowchart LR
-  Codex CLI -- (stdio) -- MCP Server -- (WebSocket) -- Office.js
+  A[Codex CLI] -->|stdio| B[MCP Server]
+  B -->|WebSocket| C[Office.js]
 ```
 
 ## Components
@@ -97,7 +98,7 @@ Trust the cert in your OS keychain so Word and your browser accept it.
 
 Point your MCP client to run `server.js` via Node.
 
-Codex CLI (.codex/config.toml):
+**Codex CLI** (`.codex/config.toml`):
 ```toml
 # Place in ./.codex/config.toml (project) or ~/.codex/config.toml (user)
 [mcp_servers.mcp_word]
@@ -118,7 +119,7 @@ Notes:
 - If using a PFX/P12 bundle: replace `--key/--cert` with `--pfx /abs/cert.pfx --passphrase "your-passphrase"`.
 - Restart the Codex Client after saving the config; tools `ping` and `editTask` should appear.
 
-Claude Desktop (settings excerpt):
+**Claude Desktop** (settings excerpt):
 ```json
 {
   "mcpServers": {
@@ -131,7 +132,7 @@ Claude Desktop (settings excerpt):
 }
 ```
 
-Claude CLI:
+**Claude CLI**:
 ```bash
 claude mcp add mcp-word -- node /absolute/path/to/server.js --key /abs/key.pem --cert /abs/cert.pem --port 3000
 ```
@@ -140,12 +141,12 @@ claude mcp add mcp-word -- node /absolute/path/to/server.js --key /abs/key.pem -
 
 Two ways to connect Word to the server:
 
-1) Sideload manifest
+**1) Sideload manifest**
 - Open Word → Add-ins → Sideload `public/manifest.xml`
 - Manifest points to `public/taskpane.html`
 - Ensure the same host/port and a trusted certificate
 
-2) Script Lab (alternative)
+**2) Script Lab (alternative)**
 - Option A (paste JS): Install Script Lab, create a new script and paste `public/taskpane.js`, and add library `https://cdn.socket.io/4.7.5/socket.io.min.js`.
 - Option B (import YAML): In Script Lab, import from https://gist.github.com/WangChengYeh/5b44e6ba1c99baae62ebc0783e1469da
 
@@ -197,7 +198,7 @@ JSON-RPC example (MCP stdio frame):
 
 ## Testing
 
-### Two Modes at a Glance
+### Testing Modes
 
 - Simple mode: `server.js --simple` hooks `tool_simple.js` (flow tests)
   - Unit: `npm run test:simple`
