@@ -1,7 +1,7 @@
 # MCP Word — MCP Server + Office Add-in
 
-**Version**: 1.0.0  
-**Date**: 2025-08-07  
+**Version**: 0.1.0  
+**Date**: 2025-08-13
 **Language**: English only
 
 AI-driven document editing for Microsoft Word using a local MCP server (stdio) bridged to an Office.js task pane via Socket.IO over HTTPS. This project builds a MCP server (`node server.js`) alongside an Office.js Word Add-in client to enable AI-driven document editing workflows.
